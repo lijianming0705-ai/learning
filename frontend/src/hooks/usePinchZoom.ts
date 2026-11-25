@@ -20,6 +20,12 @@ function clamp(val: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, val));
 }
 
+function touchDistance(t1: Touch, t2: Touch): number {
+  const dx = t1.clientX - t2.clientX;
+  const dy = t1.clientY - t2.clientY;
+  return Math.hypot(dx, dy);
+}
+
 export function usePinchZoom({
   containerRef,
   minScale,
@@ -34,6 +40,8 @@ export function usePinchZoom({
   const commitTimerRef = useRef<number | null>(null);
   const gestureBaseRef = useRef(currentScale);
   const latestPinchRef = useRef(currentScale);
+  const touchPinchStartDistRef = useRef<number | null>(null);
+  const touchPinchBaseScaleRef = useRef<number>(currentScale);
 
   scaleRef.current = currentScale;
   onChangeRef.current = onScaleChange;
@@ -89,16 +97,57 @@ export function usePinchZoom({
       onCommitRef.current?.(latestPinchRef.current);
     };
 
+    const onTouchStart = (e: TouchEvent) => {
+      if (e.touches.length === 2) {
+        e.preventDefault();
+        touchPinchStartDistRef.current = touchDistance(e.touches[0], e.touches[1]);
+        touchPinchBaseScaleRef.current = scaleRef.current;
+      }
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (e.touches.length === 2 && touchPinchStartDistRef.current) {
+        e.preventDefault();
+        const dist = touchDistance(e.touches[0], e.touches[1]);
+        const ratio = dist / touchPinchStartDistRef.current;
+        const next = clamp(touchPinchBaseScaleRef.current * ratio, minScale, maxScale);
+        scaleRef.current = next;
+        latestPinchRef.current = next;
+        const cx = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+        const cy = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+        onChangeRef.current(next, { clientX: cx, clientY: cy });
+      }
+    };
+
+    const onTouchEnd = (e: TouchEvent) => {
+      if (touchPinchStartDistRef.current !== null && e.touches.length < 2) {
+        touchPinchStartDistRef.current = null;
+        if (commitTimerRef.current !== null) {
+          window.clearTimeout(commitTimerRef.current);
+          commitTimerRef.current = null;
+        }
+        onCommitRef.current?.(latestPinchRef.current);
+      }
+    };
+
     el.addEventListener('wheel', onWheel, { passive: false });
     el.addEventListener('gesturestart', onGestureStart, { passive: false });
     el.addEventListener('gesturechange', onGestureChange, { passive: false });
     el.addEventListener('gestureend', onGestureEnd, { passive: false });
+    el.addEventListener('touchstart', onTouchStart, { passive: false });
+    el.addEventListener('touchmove', onTouchMove, { passive: false });
+    el.addEventListener('touchend', onTouchEnd, { passive: true });
+    el.addEventListener('touchcancel', onTouchEnd, { passive: true });
 
     return () => {
       el.removeEventListener('wheel', onWheel);
       el.removeEventListener('gesturestart', onGestureStart);
       el.removeEventListener('gesturechange', onGestureChange);
       el.removeEventListener('gestureend', onGestureEnd);
+      el.removeEventListener('touchstart', onTouchStart);
+      el.removeEventListener('touchmove', onTouchMove);
+      el.removeEventListener('touchend', onTouchEnd);
+      el.removeEventListener('touchcancel', onTouchEnd);
       if (commitTimerRef.current !== null) {
         window.clearTimeout(commitTimerRef.current);
       }

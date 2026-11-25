@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { ExternalLink, FileText, ZoomIn, ZoomOut } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ChevronLeft, ChevronRight, ExternalLink, FileText, ZoomIn, ZoomOut } from 'lucide-react';
 import { usePinchZoom } from '../hooks/usePinchZoom';
 import type { Highlight, PendingSelection, SourceDetail } from '../types';
 
@@ -10,6 +10,7 @@ interface DocumentViewerProps {
   pulseHighlightId: string | null;
   expandedReading?: boolean;
   fullWidthReading?: boolean;
+  einkMode?: boolean;
   onSelectHighlight: (highlightId: string) => void;
   onTextSelected: (sel: PendingSelection) => void;
 }
@@ -21,12 +22,14 @@ export function DocumentViewer({
   pulseHighlightId,
   expandedReading = false,
   fullWidthReading = false,
+  einkMode = false,
   onSelectHighlight,
   onTextSelected,
 }: DocumentViewerProps) {
   const articleRef = useRef<HTMLDivElement | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const [docZoom, setDocZoom] = useState(1);
+  const lastSelKeyRef = useRef('');
 
   usePinchZoom({
     containerRef: scrollContainerRef,
@@ -51,7 +54,6 @@ export function DocumentViewer({
 
     if (highlights.length === 0) return;
 
-    // Collect all text nodes and their cumulative offsets
     const collectNodes = () => {
       const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
       const segments: { node: Text; start: number; end: number }[] = [];
@@ -118,40 +120,38 @@ export function DocumentViewer({
     }
   }, [renderedHtml, highlights, activeHighlightId, pulseHighlightId]);
 
-  // Scroll to active/pulsed highlight
   useEffect(() => {
     const targetId = pulseHighlightId || activeHighlightId;
     if (!targetId || !articleRef.current) return;
     const mark = articleRef.current.querySelector(`mark[data-highlight-id="${targetId}"]`);
     if (mark) {
-      mark.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      mark.scrollIntoView({ behavior: einkMode ? 'auto' : 'smooth', block: 'center' });
     }
-  }, [pulseHighlightId, activeHighlightId]);
+  }, [pulseHighlightId, activeHighlightId, einkMode]);
 
-  const handleMouseUp = (e: React.MouseEvent<HTMLDivElement>) => {
-    const target = e.target as HTMLElement;
-    const clickedMark = target.closest('mark[data-highlight-id]') as HTMLElement | null;
+  const emitSelectionFromDom = useCallback(() => {
     const sel = window.getSelection();
-    if (!sel || sel.isCollapsed) {
-      if (clickedMark?.dataset.highlightId) {
-        onSelectHighlight(clickedMark.dataset.highlightId);
-      }
+    if (!sel || sel.isCollapsed || !articleRef.current) {
+      lastSelKeyRef.current = '';
       return;
     }
-
     const quoteText = sel.toString().trim();
-    if (!quoteText || !articleRef.current) return;
+    if (!quoteText) return;
+
     const range = sel.getRangeAt(0);
     if (!articleRef.current.contains(range.commonAncestorContainer)) return;
 
-    // Compute plain-text character offset inside articleRef
     const preRange = document.createRange();
     preRange.selectNodeContents(articleRef.current);
     preRange.setEnd(range.startContainer, range.startOffset);
     const startOffset = preRange.toString().length;
     const endOffset = startOffset + range.toString().length;
-    const rect = range.getBoundingClientRect();
 
+    const key = `${source.id}:${startOffset}:${endOffset}:${quoteText}`;
+    if (key === lastSelKeyRef.current) return;
+    lastSelKeyRef.current = key;
+
+    const rect = range.getBoundingClientRect();
     onTextSelected({
       quoteText,
       anchorType: 'text',
@@ -162,7 +162,66 @@ export function DocumentViewer({
       clientX: rect.left + rect.width / 2,
       clientY: rect.top,
     });
+  }, [onTextSelected, source.id]);
+
+  // Debounced selectionchange handles touchscreen drag handles on iOS/Android/E-Ink
+  useEffect(() => {
+    let timer: number | null = null;
+    const onSelChange = () => {
+      if (timer !== null) window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        emitSelectionFromDom();
+      }, 240);
+    };
+    document.addEventListener('selectionchange', onSelChange);
+    return () => {
+      document.removeEventListener('selectionchange', onSelChange);
+      if (timer !== null) window.clearTimeout(timer);
+    };
+  }, [emitSelectionFromDom]);
+
+  const handleMouseOrTouchUp = (e: React.SyntheticEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLElement;
+    const clickedMark = target.closest('mark[data-highlight-id]') as HTMLElement | null;
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed) {
+      if (clickedMark?.dataset.highlightId) {
+        onSelectHighlight(clickedMark.dataset.highlightId);
+      }
+      return;
+    }
+    emitSelectionFromDom();
   };
+
+  const turnScreen = useCallback(
+    (direction: 1 | -1) => {
+      const container = scrollContainerRef.current;
+      if (!container) return;
+      const step = Math.max(200, Math.floor(container.clientHeight * 0.86));
+      container.scrollBy({
+        top: direction * step,
+        behavior: einkMode ? 'instant' : 'smooth',
+      });
+    },
+    [einkMode],
+  );
+
+  useEffect(() => {
+    if (!einkMode) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA' || target?.isContentEditable) return;
+      if (e.key === 'PageDown' || e.key === 'ArrowRight') {
+        e.preventDefault();
+        turnScreen(1);
+      } else if (e.key === 'PageUp' || e.key === 'ArrowLeft') {
+        e.preventDefault();
+        turnScreen(-1);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [einkMode, turnScreen]);
 
   const containerWidthClass = fullWidthReading
     ? 'max-w-5xl'
@@ -171,68 +230,94 @@ export function DocumentViewer({
       : 'max-w-3xl';
 
   return (
-    <div ref={scrollContainerRef} className="flex-1 overflow-y-auto bg-[#F8F6F1] px-6 py-6">
-      <div className={`${containerWidthClass} mx-auto bg-white border border-[#E5E0D5] rounded-2xl shadow-xs px-8 py-7 transition-all duration-200`}>
-        <div className="pb-4 mb-6 border-b border-[#EFECE5] flex items-start justify-between gap-4">
-          <div>
-            <div className="inline-flex items-center gap-1.5 text-xs text-[#5E5B53] mb-1">
-              <FileText className="w-3.5 h-3.5 text-[#B45309]" />
-              <span>{source.type === 'docx' ? 'Word 文档' : source.type === 'url' ? '网页精读' : '文本文档'}</span>
-              <span>·</span>
-              <span>{source.word_count} 字</span>
-            </div>
-            <h1 className="text-xl font-bold text-[#1C1B18]">{source.title}</h1>
-          </div>
-
-          <div className="flex items-center gap-2 shrink-0 mt-0.5">
-            <div className="inline-flex items-center gap-0.5 rounded-lg border border-[#E5E0D5] bg-[#FAF8F4] px-1 py-0.5 text-[11px]">
-              <button
-                type="button"
-                onClick={() => setDocZoom((z) => Math.max(0.7, Number((z - 0.1).toFixed(2))))}
-                className="p-1 rounded hover:bg-[#EFECE5] text-[#5E5B53] cursor-pointer"
-                title="缩小字号"
-              >
-                <ZoomOut className="w-3 h-3" />
-              </button>
-              <button
-                type="button"
-                onClick={() => setDocZoom(1)}
-                className="px-1.5 py-0.5 font-medium text-[#1C1B18] hover:text-[#B45309] cursor-pointer"
-                title="支持触控板双指缩放，点击重置为 100%"
-              >
-                {Math.round(docZoom * 100)}%
-              </button>
-              <button
-                type="button"
-                onClick={() => setDocZoom((z) => Math.min(2.2, Number((z + 0.1).toFixed(2))))}
-                className="p-1 rounded hover:bg-[#EFECE5] text-[#5E5B53] cursor-pointer"
-                title="放大字号"
-              >
-                <ZoomIn className="w-3 h-3" />
-              </button>
-            </div>
-
-            {source.source_url && (
-              <a
-                href={source.source_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-xs text-[#B45309] hover:underline"
-              >
-                <span>原文链接</span>
-                <ExternalLink className="w-3.5 h-3.5" />
-              </a>
-            )}
-          </div>
-        </div>
-
+    <div className="flex-1 flex flex-col min-h-0 bg-[#F8F6F1]">
+      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-3 sm:px-6 py-4 sm:py-6">
         <div
-          ref={articleRef}
-          onMouseUp={handleMouseUp}
-          style={{ fontSize: `${Math.round(16 * docZoom * 10) / 10}px` }}
-          className="study-prose select-text"
-        />
+          className={`${containerWidthClass} mx-auto bg-white border border-[#E5E0D5] rounded-2xl shadow-xs px-4 sm:px-8 py-5 sm:py-7 transition-all duration-200 eink-surface`}
+        >
+          <div className="pb-4 mb-5 border-b border-[#EFECE5] flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="inline-flex items-center gap-1.5 text-xs text-[#5E5B53] mb-1">
+                <FileText className="w-3.5 h-3.5 text-[#B45309]" />
+                <span>{source.type === 'docx' ? 'Word 文档' : source.type === 'url' ? '网页精读' : '文本文档'}</span>
+                <span>·</span>
+                <span>{source.word_count} 字</span>
+              </div>
+              <h1 className="text-lg sm:text-xl font-bold text-[#1C1B18] break-words">{source.title}</h1>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0 mt-0.5">
+              <div className="inline-flex items-center gap-0.5 rounded-lg border border-[#E5E0D5] bg-[#FAF8F4] px-1 py-0.5 text-[11px]">
+                <button
+                  type="button"
+                  onClick={() => setDocZoom((z) => Math.max(0.7, Number((z - 0.1).toFixed(2))))}
+                  className="p-1.5 sm:p-1 rounded hover:bg-[#EFECE5] text-[#5E5B53] cursor-pointer"
+                  title="缩小字号"
+                >
+                  <ZoomOut className="w-3.5 h-3.5 sm:w-3 sm:h-3" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDocZoom(1)}
+                  className="px-1.5 py-0.5 font-medium text-[#1C1B18] hover:text-[#B45309] cursor-pointer"
+                  title="支持双指捏合缩放，点击重置为 100%"
+                >
+                  {Math.round(docZoom * 100)}%
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDocZoom((z) => Math.min(2.2, Number((z + 0.1).toFixed(2))))}
+                  className="p-1.5 sm:p-1 rounded hover:bg-[#EFECE5] text-[#5E5B53] cursor-pointer"
+                  title="放大字号"
+                >
+                  <ZoomIn className="w-3.5 h-3.5 sm:w-3 sm:h-3" />
+                </button>
+              </div>
+
+              {source.source_url && (
+                <a
+                  href={source.source_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-xs text-[#B45309] hover:underline"
+                >
+                  <span>原文链接</span>
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </a>
+              )}
+            </div>
+          </div>
+
+          <div
+            ref={articleRef}
+            onMouseUp={handleMouseOrTouchUp}
+            onTouchEnd={handleMouseOrTouchUp}
+            style={{ fontSize: `${Math.round(16 * docZoom * 10) / 10}px` }}
+            className="study-prose select-text"
+          />
+        </div>
       </div>
+
+      {einkMode && (
+        <div className="h-12 shrink-0 border-t-2 border-black bg-white px-4 flex items-center justify-between gap-4 eink-surface">
+          <button
+            type="button"
+            onClick={() => turnScreen(-1)}
+            className="flex-1 h-9 rounded-lg border-2 border-black bg-white text-black text-xs font-semibold inline-flex items-center justify-center gap-1 cursor-pointer"
+          >
+            <ChevronLeft className="w-4 h-4" />
+            <span>上一屏</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => turnScreen(1)}
+            className="flex-1 h-9 rounded-lg border-2 border-black bg-black text-white text-xs font-semibold inline-flex items-center justify-center gap-1 cursor-pointer"
+          >
+            <span>下一屏</span>
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
+      )}
     </div>
   );
 }

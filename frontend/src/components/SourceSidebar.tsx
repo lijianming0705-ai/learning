@@ -5,6 +5,7 @@ import type { SourceSummary } from '../types';
 interface SourceSidebarProps {
   sources: SourceSummary[];
   activeSourceId: string | null;
+  className?: string;
   onSelectSource: (sourceId: string) => void;
   onUploadFiles: (files: File[]) => Promise<void>;
   onImportUrl: (url: string) => Promise<void>;
@@ -15,6 +16,7 @@ interface SourceSidebarProps {
 export function SourceSidebar({
   sources,
   activeSourceId,
+  className = '',
   onSelectSource,
   onUploadFiles,
   onImportUrl,
@@ -72,7 +74,7 @@ export function SourceSidebar({
   };
 
   return (
-    <aside className="w-[270px] shrink-0 border-r border-[#E5E0D5] bg-[#FAF8F4] flex flex-col h-full">
+    <aside className={`w-[270px] shrink-0 border-r border-[#E5E0D5] bg-[#FAF8F4] flex flex-col h-full eink-surface ${className}`}>
       <div className="p-3 border-b border-[#E5E0D5] space-y-2.5">
         <div className="flex items-center justify-between">
           <span className="text-xs font-semibold uppercase tracking-wider text-[#5E5B53]">学习素材</span>
@@ -197,7 +199,7 @@ export function SourceSidebar({
                         onDeleteSource(src.id);
                       }
                     }}
-                    className="opacity-0 group-hover:opacity-100 p-1 rounded text-[#5E5B53] hover:text-rose-600 cursor-pointer shrink-0"
+                    className="opacity-100 md:opacity-0 md:group-hover:opacity-100 p-1 rounded text-[#5E5B53] hover:text-rose-600 cursor-pointer shrink-0"
                     title="删除素材"
                   >
                     <Trash2 className="w-3.5 h-3.5" />

@@ -167,7 +167,7 @@ export function NotebookGrid({
                           onDeleteNotebook(nb.id);
                         }
                       }}
-                      className="opacity-0 group-hover:opacity-100 p-1.5 rounded-lg text-[#5E5B53] hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer"
+                      className="opacity-100 md:opacity-0 md:group-hover:opacity-100 p-1.5 rounded-lg text-[#5E5B53] hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer"
                       title="删除笔记本"
                     >
                       <Trash2 className="w-4 h-4" />

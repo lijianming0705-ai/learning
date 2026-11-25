@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import {
+  BookOpen,
   Database,
+  FileText,
   MessageSquare,
   NotebookPen,
   PanelLeftOpen,
@@ -96,6 +98,34 @@ export default function App() {
       return false;
     }
   });
+  const [einkMode, setEinkMode] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('inkmind.einkMode') === 'true';
+    } catch {
+      return false;
+    }
+  });
+  const [isCompactViewport, setIsCompactViewport] = useState<boolean>(() =>
+    typeof window !== 'undefined' ? window.matchMedia('(max-width: 1023px)').matches : false,
+  );
+  const [mobileDrawer, setMobileDrawer] = useState<'none' | 'sources' | 'right'>('none');
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = einkMode ? 'eink' : 'paper';
+    try {
+      localStorage.setItem('inkmind.einkMode', String(einkMode));
+    } catch {
+      // ignore storage errors
+    }
+  }, [einkMode]);
+
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 1023px)');
+    const onChange = () => setIsCompactViewport(mq.matches);
+    onChange();
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
 
   useEffect(() => {
     try {
@@ -292,9 +322,11 @@ export default function App() {
       window.getSelection()?.removeAllRanges();
       if (mode === 'translate') {
         setRightCollapsed(false);
+        if (isCompactViewport) setMobileDrawer('right');
         void handleAskHighlight(created.id, QUICK_TRANSLATE_PROMPT, true, settings.cross_notebook_rag);
       } else if (mode !== 'highlight') {
         setRightCollapsed(false);
+        if (isCompactViewport) setMobileDrawer('right');
         setFocusIntent({ highlightId: created.id, mode });
       }
       if (activeNotebook) {
@@ -476,10 +508,12 @@ export default function App() {
         setPulseHighlightId(mem.highlight_id);
         setRightTab('remarks');
         setRightCollapsed(false);
+        if (isCompactViewport) setMobileDrawer('right');
         setTimeout(() => setPulseHighlightId((cur) => (cur === mem.highlight_id ? null : cur)), 2200);
       } else if (mem.conversation_id) {
         setRightTab('chat');
         setRightCollapsed(false);
+        if (isCompactViewport) setMobileDrawer('right');
         await handleSelectConversation(mem.conversation_id);
       }
       if (mem.page_number) {
@@ -493,13 +527,14 @@ export default function App() {
     setShowGlobalRag(false);
     if (activeNotebook) {
       setRightCollapsed(false);
+      if (isCompactViewport) setMobileDrawer('right');
       setRightTab(activeHighlightId ? 'remarks' : 'chat');
     }
   };
 
   return (
     <div
-      className="h-screen flex flex-col overflow-hidden bg-[#F8F6F1] text-[#1C1B18]"
+      className="h-[100dvh] flex flex-col overflow-hidden bg-[#F8F6F1] text-[#1C1B18]"
       onMouseDown={() => {
         if (pendingSelection) setPendingSelection(null);
       }}
@@ -510,6 +545,7 @@ export default function App() {
           setActiveNotebook(null);
           setActiveSource(null);
           setPendingSelection(null);
+          setMobileDrawer('none');
           refreshNotebooks().catch(() => {});
         }}
         models={models}
@@ -518,9 +554,11 @@ export default function App() {
         health={health}
         leftCollapsed={leftCollapsed}
         rightCollapsed={rightCollapsed}
+        einkMode={einkMode}
         onToggleLeft={() => setLeftCollapsed((v) => !v)}
         onToggleRight={() => setRightCollapsed((v) => !v)}
         onToggleFocusMode={toggleFocusMode}
+        onToggleEinkMode={() => setEinkMode((v) => !v)}
         onOpenGlobalRag={() => setShowGlobalRag(true)}
         onOpenSettings={() => setShowSettings(true)}
       />
@@ -543,204 +581,327 @@ export default function App() {
           onJumpToRagMemory={handleJumpToMemory}
         />
       ) : (
-        <main className="flex-1 flex min-h-0 overflow-hidden">
-          {!leftCollapsed && (
-            <SourceSidebar
-              sources={sources}
-              activeSourceId={activeSource?.id || null}
-              onSelectSource={(sid) => loadSource(sid)}
-              onUploadFiles={handleUploadFiles}
-              onImportUrl={handleImportUrl}
-              onDeleteSource={handleDeleteSource}
-              onCollapse={() => setLeftCollapsed(true)}
-            />
-          )}
-
-          {/* Center Document / PDF Reader */}
-          <section className="flex-1 flex flex-col min-w-0 min-h-0 relative">
-            {leftCollapsed && (
-              <button
-                type="button"
-                onClick={() => setLeftCollapsed(false)}
-                title="展开素材栏 (⌘[)"
-                className="absolute left-2.5 top-13 z-20 inline-flex items-center gap-1 px-2 py-1.5 rounded-lg bg-white/95 backdrop-blur border border-[#E5E0D5] shadow-sm text-xs font-medium text-[#5E5B53] hover:text-[#1C1B18] hover:border-[#B45309] transition cursor-pointer"
-              >
-                <PanelLeftOpen className="w-3.5 h-3.5 text-[#B45309]" />
-                <span className="hidden sm:inline">素材</span>
-              </button>
+        <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+          <main className="flex-1 flex min-h-0 overflow-hidden relative">
+            {/* Desktop Left Sidebar */}
+            {!isCompactViewport && !leftCollapsed && (
+              <SourceSidebar
+                sources={sources}
+                activeSourceId={activeSource?.id || null}
+                onSelectSource={(sid) => loadSource(sid)}
+                onUploadFiles={handleUploadFiles}
+                onImportUrl={handleImportUrl}
+                onDeleteSource={handleDeleteSource}
+                onCollapse={() => setLeftCollapsed(true)}
+              />
             )}
 
-            {rightCollapsed && (
-              <button
-                type="button"
-                onClick={() => setRightCollapsed(false)}
-                title="展开笔记与 AI 栏 (⌘])"
-                className="absolute right-2.5 top-13 z-20 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white/95 backdrop-blur border border-[#E5E0D5] shadow-sm text-xs font-medium text-[#5E5B53] hover:text-[#1C1B18] hover:border-[#B45309] transition cursor-pointer"
-              >
-                <PanelRightOpen className="w-3.5 h-3.5 text-[#B45309]" />
-                <span className="hidden sm:inline">笔记 / AI</span>
-                {highlights.length > 0 && (
-                  <span className="px-1.5 py-0.2 rounded-full bg-[#B45309]/10 text-[#B45309] text-[10px] font-semibold">
-                    {highlights.length}
-                  </span>
-                )}
-              </button>
-            )}
-
-            {!activeSource ? (
-              <div className="flex-1 flex items-center justify-center p-8 text-center text-sm text-[#5E5B53]">
-                <div>
-                  <p className="font-medium text-[#1C1B18]">请先在左侧拖入 PDF / Word 或导入文章网址</p>
-                  <p className="text-xs mt-1">支持 PDF 划词与框选高亮、实时 AI 回答与历史对话 RAG 记忆检索。</p>
+            {/* Mobile/Tablet Left Drawer */}
+            {isCompactViewport && mobileDrawer === 'sources' && (
+              <div className="fixed inset-0 z-40 flex">
+                <div
+                  className="fixed inset-0 bg-black/40"
+                  onClick={() => setMobileDrawer('none')}
+                />
+                <div className="relative z-10 h-full">
+                  <SourceSidebar
+                    className="w-[85vw] max-w-[320px] shadow-2xl"
+                    sources={sources}
+                    activeSourceId={activeSource?.id || null}
+                    onSelectSource={(sid) => {
+                      loadSource(sid);
+                      setMobileDrawer('none');
+                    }}
+                    onUploadFiles={handleUploadFiles}
+                    onImportUrl={handleImportUrl}
+                    onDeleteSource={handleDeleteSource}
+                    onCollapse={() => setMobileDrawer('none')}
+                  />
                 </div>
               </div>
-            ) : activeSource.type === 'pdf' ? (
-              <PdfViewer
-                source={activeSource}
-                highlights={highlights}
-                activeHighlightId={activeHighlightId}
-                pulseHighlightId={pulseHighlightId}
-                jumpPage={jumpPage}
-                onSelectHighlight={(hlId) => {
-                  setActiveHighlightId(hlId);
-                  setRightTab('remarks');
-                  setRightCollapsed(false);
-                }}
-                onSelectionMade={setPendingSelection}
-              />
-            ) : (
-              <DocumentViewer
-                source={activeSource}
-                highlights={highlights}
-                activeHighlightId={activeHighlightId}
-                pulseHighlightId={pulseHighlightId}
-                expandedReading={leftCollapsed || rightCollapsed}
-                fullWidthReading={leftCollapsed && rightCollapsed}
-                onSelectHighlight={(hlId) => {
-                  setActiveHighlightId(hlId);
-                  setRightTab('remarks');
-                  setRightCollapsed(false);
-                }}
-                onTextSelected={setPendingSelection}
-              />
             )}
-          </section>
 
-          {/* Right Panel: Remarks / Chat / RAG */}
-          {!rightCollapsed && (
-            <aside className="w-[380px] xl:w-[420px] shrink-0 border-l border-[#E5E0D5] bg-white flex flex-col min-h-0">
-              <div className="h-11 shrink-0 border-b border-[#E5E0D5] px-2 flex items-center gap-1 bg-[#FAF8F4]">
-                <button
-                  onClick={() => setRightTab('remarks')}
-                  className={`flex-1 inline-flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition ${
-                    rightTab === 'remarks'
-                      ? 'bg-white text-[#B45309] shadow-xs border border-[#E5E0D5]'
-                      : 'text-[#5E5B53] hover:text-[#1C1B18]'
-                  }`}
-                >
-                  <NotebookPen className="w-3.5 h-3.5" />
-                  <span>划线备注 ({highlights.length})</span>
-                </button>
-
-                <button
-                  onClick={() => setRightTab('chat')}
-                  className={`flex-1 inline-flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition ${
-                    rightTab === 'chat'
-                      ? 'bg-white text-[#B45309] shadow-xs border border-[#E5E0D5]'
-                      : 'text-[#5E5B53] hover:text-[#1C1B18]'
-                  }`}
-                >
-                  <MessageSquare className="w-3.5 h-3.5" />
-                  <span>AI 对话</span>
-                </button>
-
-                <button
-                  onClick={() => setRightTab('rag')}
-                  className={`flex-1 inline-flex items-center justify-center gap-1.5 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition ${
-                    rightTab === 'rag'
-                      ? 'bg-white text-[#B45309] shadow-xs border border-[#E5E0D5]'
-                      : 'text-[#5E5B53] hover:text-[#1C1B18]'
-                  }`}
-                >
-                  <Database className="w-3.5 h-3.5" />
-                  <span>RAG 记忆</span>
-                </button>
-
+            {/* Center Document / PDF Reader */}
+            <section className="flex-1 flex flex-col min-w-0 min-h-0 relative">
+              {!isCompactViewport && leftCollapsed && (
                 <button
                   type="button"
-                  onClick={() => setRightCollapsed(true)}
-                  title="收起右侧笔记栏 (⌘])"
-                  className="p-1.5 rounded-lg text-[#5E5B53] hover:text-[#1C1B18] hover:bg-[#EFECE5] cursor-pointer shrink-0"
+                  onClick={() => setLeftCollapsed(false)}
+                  title="展开素材栏 (⌘[)"
+                  className="absolute left-2.5 top-13 z-20 inline-flex items-center gap-1 px-2 py-1.5 rounded-lg bg-white/95 backdrop-blur border border-[#E5E0D5] shadow-sm text-xs font-medium text-[#5E5B53] hover:text-[#1C1B18] hover:border-[#B45309] transition cursor-pointer eink-surface"
                 >
-                  <PanelRightClose className="w-3.5 h-3.5" />
+                  <PanelLeftOpen className="w-3.5 h-3.5 text-[#B45309]" />
+                  <span className="hidden sm:inline">素材</span>
                 </button>
-              </div>
+              )}
 
-            <div className="flex-1 min-h-0">
-              {rightTab === 'remarks' && (
-                <RemarksPanel
+              {!isCompactViewport && rightCollapsed && (
+                <button
+                  type="button"
+                  onClick={() => setRightCollapsed(false)}
+                  title="展开笔记与 AI 栏 (⌘])"
+                  className="absolute right-2.5 top-13 z-20 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white/95 backdrop-blur border border-[#E5E0D5] shadow-sm text-xs font-medium text-[#5E5B53] hover:text-[#1C1B18] hover:border-[#B45309] transition cursor-pointer eink-surface"
+                >
+                  <PanelRightOpen className="w-3.5 h-3.5 text-[#B45309]" />
+                  <span className="hidden sm:inline">笔记 / AI</span>
+                  {highlights.length > 0 && (
+                    <span className="px-1.5 py-0.2 rounded-full bg-[#B45309]/10 text-[#B45309] text-[10px] font-semibold">
+                      {highlights.length}
+                    </span>
+                  )}
+                </button>
+              )}
+
+              {!activeSource ? (
+                <div className="flex-1 flex items-center justify-center p-8 text-center text-sm text-[#5E5B53]">
+                  <div className="space-y-3">
+                    <p className="font-medium text-[#1C1B18]">请先在素材栏拖入 PDF / Word 或导入文章网址</p>
+                    <p className="text-xs">支持 PDF 划词与框选高亮、翻译解释、AI 问答与历史对话 RAG 记忆检索。</p>
+                    {isCompactViewport && (
+                      <button
+                        type="button"
+                        onClick={() => setMobileDrawer('sources')}
+                        className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#B45309] text-white text-xs font-medium cursor-pointer"
+                      >
+                        <FileText className="w-3.5 h-3.5" />
+                        <span>打开素材栏导入</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ) : activeSource.type === 'pdf' ? (
+                <PdfViewer
+                  source={activeSource}
                   highlights={highlights}
                   activeHighlightId={activeHighlightId}
-                  focusIntent={focusIntent}
-                  streamingMap={highlightStreams}
-                  quotedContext={quotedContext}
-                  models={models}
-                  selectedModel={selectedModel}
-                  onSelectModel={setSelectedModel}
-                  onClearQuotedContext={() => setQuotedContext(null)}
-                  onSelectHighlight={(hl) => {
-                    setActiveHighlightId(hl.id);
-                    setPulseHighlightId(hl.id);
-                    setJumpPage({ page: hl.page_number, seq: Date.now() });
-                    setTimeout(() => setPulseHighlightId((cur) => (cur === hl.id ? null : cur)), 1800);
+                  pulseHighlightId={pulseHighlightId}
+                  jumpPage={jumpPage}
+                  einkMode={einkMode}
+                  onSelectHighlight={(hlId) => {
+                    setActiveHighlightId(hlId);
+                    setRightTab('remarks');
+                    setRightCollapsed(false);
+                    if (isCompactViewport) setMobileDrawer('right');
                   }}
-                  onUpdateHighlight={handleUpdateHighlight}
-                  onDeleteHighlight={handleDeleteHighlight}
-                  onAskHighlight={handleAskHighlight}
-                  onJumpToMemory={handleJumpToMemory}
+                  onSelectionMade={setPendingSelection}
+                />
+              ) : (
+                <DocumentViewer
+                  source={activeSource}
+                  highlights={highlights}
+                  activeHighlightId={activeHighlightId}
+                  pulseHighlightId={pulseHighlightId}
+                  expandedReading={leftCollapsed || rightCollapsed}
+                  fullWidthReading={leftCollapsed && rightCollapsed}
+                  einkMode={einkMode}
+                  onSelectHighlight={(hlId) => {
+                    setActiveHighlightId(hlId);
+                    setRightTab('remarks');
+                    setRightCollapsed(false);
+                    if (isCompactViewport) setMobileDrawer('right');
+                  }}
+                  onTextSelected={setPendingSelection}
                 />
               )}
+            </section>
 
-              {rightTab === 'chat' && (
-                <NotebookChatPanel
-                  conversations={conversations}
-                  activeConversationId={activeConvId}
-                  messages={chatMessages}
-                  streamingText={chatStreamingText}
-                  streamingStatus={chatStreamingStatus}
-                  streamingActive={chatStreaming}
-                  quotedContext={quotedContext}
-                  models={models}
-                  selectedModel={selectedModel}
-                  onSelectModel={setSelectedModel}
-                  onClearQuotedContext={() => setQuotedContext(null)}
-                  onSelectConversation={handleSelectConversation}
-                  onNewConversation={() => {
-                    setActiveConvId(null);
-                    setChatMessages([]);
-                  }}
-                  onDeleteConversation={handleDeleteConversation}
-                  onSendMessage={handleSendNotebookChat}
-                  onJumpToMemory={handleJumpToMemory}
-                />
-              )}
+            {/* Right Panel Backdrop for Mobile/Tablet */}
+            {isCompactViewport && mobileDrawer === 'right' && (
+              <div
+                className="fixed inset-0 z-30 bg-black/40"
+                onClick={() => setMobileDrawer('none')}
+              />
+            )}
 
-              {rightTab === 'rag' && (
-                <RagExplorerPanel
-                  notebookId={activeNotebook.id}
-                  ragStats={ragStats}
-                  onJumpToMemory={handleJumpToMemory}
-                  onQuoteMemory={handleQuoteMemory}
-                  onReindex={async () => {
-                    const st = await api.ragReindex();
-                    setRagStats(st);
-                  }}
-                />
-              )}
-            </div>
-            </aside>
+            {/* Right Panel: Remarks / Chat / RAG */}
+            {((!isCompactViewport && !rightCollapsed) || (isCompactViewport && mobileDrawer === 'right')) && (
+              <aside
+                className={
+                  isCompactViewport
+                    ? 'fixed inset-x-0 bottom-0 h-[82dvh] rounded-t-2xl sm:inset-y-0 sm:left-auto sm:right-0 sm:h-full sm:w-[88vw] sm:max-w-[430px] sm:rounded-none z-40 border-t sm:border-t-0 sm:border-l border-[#E5E0D5] bg-white flex flex-col min-h-0 shadow-2xl eink-surface'
+                    : 'w-[380px] xl:w-[420px] shrink-0 border-l border-[#E5E0D5] bg-white flex flex-col min-h-0 eink-surface'
+                }
+              >
+                <div className="h-11 shrink-0 border-b border-[#E5E0D5] px-2 flex items-center gap-1 bg-[#FAF8F4] eink-surface">
+                  <button
+                    onClick={() => setRightTab('remarks')}
+                    className={`flex-1 inline-flex items-center justify-center gap-1 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition ${
+                      rightTab === 'remarks'
+                        ? 'bg-white text-[#B45309] shadow-xs border border-[#E5E0D5]'
+                        : 'text-[#5E5B53] hover:text-[#1C1B18]'
+                    }`}
+                  >
+                    <NotebookPen className="w-3.5 h-3.5" />
+                    <span>划线备注 ({highlights.length})</span>
+                  </button>
+
+                  <button
+                    onClick={() => setRightTab('chat')}
+                    className={`flex-1 inline-flex items-center justify-center gap-1 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition ${
+                      rightTab === 'chat'
+                        ? 'bg-white text-[#B45309] shadow-xs border border-[#E5E0D5]'
+                        : 'text-[#5E5B53] hover:text-[#1C1B18]'
+                    }`}
+                  >
+                    <MessageSquare className="w-3.5 h-3.5" />
+                    <span>AI 对话</span>
+                  </button>
+
+                  <button
+                    onClick={() => setRightTab('rag')}
+                    className={`flex-1 inline-flex items-center justify-center gap-1 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition ${
+                      rightTab === 'rag'
+                        ? 'bg-white text-[#B45309] shadow-xs border border-[#E5E0D5]'
+                        : 'text-[#5E5B53] hover:text-[#1C1B18]'
+                    }`}
+                  >
+                    <Database className="w-3.5 h-3.5" />
+                    <span>RAG 记忆</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (isCompactViewport) setMobileDrawer('none');
+                      else setRightCollapsed(true);
+                    }}
+                    title={isCompactViewport ? '关闭面板' : '收起右侧笔记栏 (⌘])'}
+                    className="p-1.5 rounded-lg text-[#5E5B53] hover:text-[#1C1B18] hover:bg-[#EFECE5] cursor-pointer shrink-0"
+                  >
+                    {isCompactViewport ? <X className="w-4 h-4" /> : <PanelRightClose className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+
+                <div className="flex-1 min-h-0">
+                  {rightTab === 'remarks' && (
+                    <RemarksPanel
+                      highlights={highlights}
+                      activeHighlightId={activeHighlightId}
+                      focusIntent={focusIntent}
+                      streamingMap={highlightStreams}
+                      quotedContext={quotedContext}
+                      models={models}
+                      selectedModel={selectedModel}
+                      onSelectModel={setSelectedModel}
+                      onClearQuotedContext={() => setQuotedContext(null)}
+                      onSelectHighlight={(hl) => {
+                        setActiveHighlightId(hl.id);
+                        setPulseHighlightId(hl.id);
+                        setJumpPage({ page: hl.page_number, seq: Date.now() });
+                        if (isCompactViewport) setMobileDrawer('none');
+                        setTimeout(() => setPulseHighlightId((cur) => (cur === hl.id ? null : cur)), 1800);
+                      }}
+                      onUpdateHighlight={handleUpdateHighlight}
+                      onDeleteHighlight={handleDeleteHighlight}
+                      onAskHighlight={handleAskHighlight}
+                      onJumpToMemory={handleJumpToMemory}
+                    />
+                  )}
+
+                  {rightTab === 'chat' && (
+                    <NotebookChatPanel
+                      conversations={conversations}
+                      activeConversationId={activeConvId}
+                      messages={chatMessages}
+                      streamingText={chatStreamingText}
+                      streamingStatus={chatStreamingStatus}
+                      streamingActive={chatStreaming}
+                      quotedContext={quotedContext}
+                      models={models}
+                      selectedModel={selectedModel}
+                      onSelectModel={setSelectedModel}
+                      onClearQuotedContext={() => setQuotedContext(null)}
+                      onSelectConversation={handleSelectConversation}
+                      onNewConversation={() => {
+                        setActiveConvId(null);
+                        setChatMessages([]);
+                      }}
+                      onDeleteConversation={handleDeleteConversation}
+                      onSendMessage={handleSendNotebookChat}
+                      onJumpToMemory={handleJumpToMemory}
+                    />
+                  )}
+
+                  {rightTab === 'rag' && (
+                    <RagExplorerPanel
+                      notebookId={activeNotebook.id}
+                      ragStats={ragStats}
+                      onJumpToMemory={handleJumpToMemory}
+                      onQuoteMemory={handleQuoteMemory}
+                      onReindex={async () => {
+                        const st = await api.ragReindex();
+                        setRagStats(st);
+                      }}
+                    />
+                  )}
+                </div>
+              </aside>
+            )}
+          </main>
+
+          {/* Mobile / Tablet Bottom Navigation Bar */}
+          {isCompactViewport && (
+            <nav className="lg:hidden shrink-0 border-t border-[#E5E0D5] bg-white safe-pb grid grid-cols-4 z-20 eink-surface">
+              <button
+                type="button"
+                onClick={() => setMobileDrawer((d) => (d === 'sources' ? 'none' : 'sources'))}
+                className={`min-h-[50px] flex flex-col items-center justify-center gap-0.5 text-[11px] font-medium cursor-pointer ${
+                  mobileDrawer === 'sources' ? 'text-[#B45309]' : 'text-[#5E5B53]'
+                }`}
+              >
+                <FileText className="w-4 h-4" />
+                <span>素材 ({sources.length})</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setMobileDrawer('none')}
+                className={`min-h-[50px] flex flex-col items-center justify-center gap-0.5 text-[11px] font-medium cursor-pointer ${
+                  mobileDrawer === 'none' ? 'text-[#B45309]' : 'text-[#5E5B53]'
+                }`}
+              >
+                <BookOpen className="w-4 h-4" />
+                <span>阅读</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (mobileDrawer === 'right' && rightTab !== 'rag') {
+                    setMobileDrawer('none');
+                  } else {
+                    if (rightTab === 'rag') setRightTab('remarks');
+                    setMobileDrawer('right');
+                  }
+                }}
+                className={`min-h-[50px] flex flex-col items-center justify-center gap-0.5 text-[11px] font-medium cursor-pointer ${
+                  mobileDrawer === 'right' && rightTab !== 'rag' ? 'text-[#B45309]' : 'text-[#5E5B53]'
+                }`}
+              >
+                <NotebookPen className="w-4 h-4" />
+                <span>笔记/AI{highlights.length > 0 ? ` (${highlights.length})` : ''}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (mobileDrawer === 'right' && rightTab === 'rag') {
+                    setMobileDrawer('none');
+                  } else {
+                    setRightTab('rag');
+                    setMobileDrawer('right');
+                  }
+                }}
+                className={`min-h-[50px] flex flex-col items-center justify-center gap-0.5 text-[11px] font-medium cursor-pointer ${
+                  mobileDrawer === 'right' && rightTab === 'rag' ? 'text-[#B45309]' : 'text-[#5E5B53]'
+                }`}
+              >
+                <Database className="w-4 h-4" />
+                <span>RAG 记忆</span>
+              </button>
+            </nav>
           )}
-        </main>
+        </div>
       )}
 
       {pendingSelection && (

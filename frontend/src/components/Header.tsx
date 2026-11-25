@@ -1,6 +1,7 @@
 import {
   ArrowLeft,
   BookOpenText,
+  Contrast,
   Database,
   Maximize2,
   Minimize2,
@@ -22,9 +23,11 @@ interface HeaderProps {
   health: HealthStatus | null;
   leftCollapsed?: boolean;
   rightCollapsed?: boolean;
+  einkMode?: boolean;
   onToggleLeft?: () => void;
   onToggleRight?: () => void;
   onToggleFocusMode?: () => void;
+  onToggleEinkMode?: () => void;
   onOpenGlobalRag: () => void;
   onOpenSettings: () => void;
 }
@@ -38,44 +41,46 @@ export function Header({
   health,
   leftCollapsed = false,
   rightCollapsed = false,
+  einkMode = false,
   onToggleLeft,
   onToggleRight,
   onToggleFocusMode,
+  onToggleEinkMode,
   onOpenGlobalRag,
   onOpenSettings,
 }: HeaderProps) {
   const isFocusMode = leftCollapsed && rightCollapsed;
   return (
-    <header className="h-14 shrink-0 border-b border-[#E5E0D5] bg-white/90 backdrop-blur px-4 flex items-center justify-between gap-3 z-20">
-      <div className="flex items-center gap-3 min-w-0">
+    <header className="h-14 shrink-0 border-b border-[#E5E0D5] bg-white/95 backdrop-blur px-2.5 sm:px-4 flex items-center justify-between gap-2 z-20 eink-surface">
+      <div className="flex items-center gap-2 sm:gap-3 min-w-0">
         {activeNotebook ? (
           <button
             onClick={onBackToNotebooks}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm font-medium text-[#5E5B53] hover:text-[#1C1B18] hover:bg-[#EFECE5] transition cursor-pointer"
+            className="inline-flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs sm:text-sm font-medium text-[#5E5B53] hover:text-[#1C1B18] hover:bg-[#EFECE5] transition cursor-pointer shrink-0"
           >
             <ArrowLeft className="w-4 h-4" />
-            <span>笔记本</span>
+            <span className="hidden sm:inline">笔记本</span>
           </button>
         ) : null}
 
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-[#B45309] text-white flex items-center justify-center shadow-xs">
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="w-8 h-8 rounded-lg bg-[#B45309] text-white flex items-center justify-center shadow-xs shrink-0">
             <BookOpenText className="w-4 h-4" />
           </div>
-          <div className="leading-tight">
-            <div className="text-sm font-semibold tracking-tight text-[#1C1B18]">
+          <div className="leading-tight min-w-0">
+            <div className="text-sm font-semibold tracking-tight text-[#1C1B18] truncate max-w-[140px] sm:max-w-[260px]">
               {activeNotebook ? activeNotebook.title : 'InkMind Study'}
             </div>
-            <div className="text-[11px] text-[#5E5B53]">
+            <div className="hidden sm:block text-[11px] text-[#5E5B53] truncate">
               {activeNotebook ? activeNotebook.description || '个人智能学习工作台' : '个人知识库 · 划线精读 · agy + RAG'}
             </div>
           </div>
         </div>
       </div>
 
-      <div className="flex items-center gap-2.5">
+      <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
         {activeNotebook && (
-          <div className="flex items-center rounded-lg border border-[#E5E0D5] bg-[#FAF8F4] p-0.5">
+          <div className="hidden lg:flex items-center rounded-lg border border-[#E5E0D5] bg-[#FAF8F4] p-0.5">
             <button
               type="button"
               onClick={onToggleLeft}
@@ -118,19 +123,35 @@ export function Header({
           </div>
         )}
 
+        {onToggleEinkMode && (
+          <button
+            type="button"
+            onClick={onToggleEinkMode}
+            title="切换墨水屏高对比度无残影模式"
+            className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border text-xs font-medium transition cursor-pointer ${
+              einkMode
+                ? 'bg-black text-white border-black'
+                : 'border-[#E5E0D5] bg-[#FAF8F4] hover:bg-[#EFECE5] text-[#1C1B18]'
+            }`}
+          >
+            <Contrast className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">墨水屏</span>
+          </button>
+        )}
+
         <button
           onClick={onOpenGlobalRag}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#E5E0D5] bg-[#FAF8F4] hover:bg-[#EFECE5] text-xs font-medium text-[#1C1B18] transition cursor-pointer"
+          className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg border border-[#E5E0D5] bg-[#FAF8F4] hover:bg-[#EFECE5] text-xs font-medium text-[#1C1B18] transition cursor-pointer"
           title="搜索历史对话与学习记忆 (⌘K)"
         >
           <Database className="w-3.5 h-3.5 text-[#B45309]" />
-          <span>RAG 记忆检索</span>
-          <span className="hidden sm:inline text-[10px] px-1.5 py-0.5 rounded bg-[#E5E0D5]/70 text-[#5E5B53]">
+          <span className="hidden sm:inline">RAG 记忆</span>
+          <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#E5E0D5]/70 text-[#5E5B53]">
             {health?.rag_documents ?? 0}
           </span>
         </button>
 
-        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-[#E5E0D5] bg-[#FAF8F4]">
+        <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-[#E5E0D5] bg-[#FAF8F4]">
           <span
             className={`w-2 h-2 rounded-full ${health?.agy_available ? 'bg-emerald-500' : 'bg-rose-500'}`}
             title={health?.agy_available ? `agy CLI 已连接 (${health.agy_path})` : '未检测到 agy CLI'}
