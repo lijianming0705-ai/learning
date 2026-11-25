@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ArrowDownAZ,
+  ArrowUpZA,
   Check,
   ChevronDown,
   ChevronRight,
+  Clock,
   FileText,
   FileUp,
   Folder,
@@ -13,12 +16,15 @@ import {
   Loader2,
   PanelLeftClose,
   Pencil,
+  Search,
   Sparkles,
   Trash2,
   UploadCloud,
   X,
 } from 'lucide-react';
 import type { SourceSummary } from '../types';
+
+type SourceSortMode = 'recent' | 'name_asc' | 'name_desc';
 
 interface SourceSidebarProps {
   sources: SourceSummary[];
@@ -58,6 +64,24 @@ export function SourceSidebar({
   const [categoryDraft, setCategoryDraft] = useState('');
   const [savingEdit, setSavingEdit] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortMode, setSortMode] = useState<SourceSortMode>(() => {
+    try {
+      const saved = localStorage.getItem('inkmind.sourceSort');
+      if (saved === 'name_asc' || saved === 'name_desc' || saved === 'recent') return saved;
+    } catch {
+      // ignore storage errors
+    }
+    return 'recent';
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('inkmind.sourceSort', sortMode);
+    } catch {
+      // ignore storage errors
+    }
+  }, [sortMode]);
 
   const hasAnyCategory = useMemo(() => sources.some((s) => Boolean(s.category?.trim())), [sources]);
 
@@ -67,9 +91,32 @@ export function SourceSidebar({
     }
   }, [hasAnyCategory]);
 
+  const filteredAndSortedSources = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    const filtered = q
+      ? sources.filter((s) =>
+          [s.title, s.category, s.original_filename || '', s.source_url || '', s.type]
+            .join(' ')
+            .toLowerCase()
+            .includes(q),
+        )
+      : [...sources];
+
+    filtered.sort((a, b) => {
+      if (sortMode === 'name_asc') {
+        return a.title.localeCompare(b.title, 'zh-CN', { numeric: true, sensitivity: 'base' });
+      }
+      if (sortMode === 'name_desc') {
+        return b.title.localeCompare(a.title, 'zh-CN', { numeric: true, sensitivity: 'base' });
+      }
+      return b.created_at.localeCompare(a.created_at);
+    });
+    return filtered;
+  }, [sources, searchQuery, sortMode]);
+
   const groupedSources = useMemo(() => {
     const groups = new Map<string, SourceSummary[]>();
-    for (const src of sources) {
+    for (const src of filteredAndSortedSources) {
       const cat = src.category?.trim() || '未分类';
       const list = groups.get(cat) || [];
       list.push(src);
@@ -78,9 +125,13 @@ export function SourceSidebar({
     return Array.from(groups.entries()).sort(([a], [b]) => {
       if (a === '未分类') return 1;
       if (b === '未分类') return -1;
-      return a.localeCompare(b, 'zh-CN');
+      return a.localeCompare(b, 'zh-CN', { numeric: true, sensitivity: 'base' });
     });
-  }, [sources]);
+  }, [filteredAndSortedSources]);
+
+  const cycleSortMode = () => {
+    setSortMode((prev) => (prev === 'recent' ? 'name_asc' : prev === 'name_asc' ? 'name_desc' : 'recent'));
+  };
 
   const handleFiles = async (fileList: FileList | null) => {
     if (!fileList || fileList.length === 0) return;
@@ -334,7 +385,9 @@ export function SourceSidebar({
         <div className="flex items-center justify-between">
           <span className="text-xs font-semibold uppercase tracking-wider text-[#5E5B53]">学习素材</span>
           <div className="flex items-center gap-1.5">
-            <span className="text-[11px] text-[#5E5B53]">{sources.length} 份</span>
+            <span className="text-[11px] text-[#5E5B53]">
+              {searchQuery.trim() ? `匹配 ${filteredAndSortedSources.length} / ${sources.length}` : `${sources.length} 份`}
+            </span>
             {onCollapse && (
               <button
                 type="button"
@@ -444,6 +497,58 @@ export function SourceSidebar({
             {errorMsg}
           </div>
         )}
+
+        {/* Quick Search & Name Sort */}
+        {sources.length > 0 && (
+          <div className="flex items-center gap-1.5">
+            <div className="relative flex-1 min-w-0">
+              <Search className="w-3.5 h-3.5 text-[#5E5B53] absolute left-2 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="检索素材名称或分类..."
+                className="w-full pl-7 pr-6 py-1 rounded-lg bg-white border border-[#E5E0D5] text-xs focus:outline-none focus:border-[#B45309]"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  title="清空检索"
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 p-0.5 text-[#5E5B53] hover:text-[#1C1B18] cursor-pointer"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={cycleSortMode}
+              title={
+                sortMode === 'recent'
+                  ? '当前按时间排序，点击按名称 A→Z 排序'
+                  : sortMode === 'name_asc'
+                    ? '当前按名称 A→Z 排序，点击切换 Z→A'
+                    : '当前按名称 Z→A 排序，点击切换最近导入'
+              }
+              className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg border text-[11px] font-medium cursor-pointer shrink-0 ${
+                sortMode !== 'recent'
+                  ? 'border-[#B45309] bg-amber-50 text-[#B45309]'
+                  : 'border-[#E5E0D5] bg-white text-[#5E5B53] hover:text-[#1C1B18]'
+              }`}
+            >
+              {sortMode === 'name_asc' ? (
+                <ArrowDownAZ className="w-3.5 h-3.5" />
+              ) : sortMode === 'name_desc' ? (
+                <ArrowUpZA className="w-3.5 h-3.5" />
+              ) : (
+                <Clock className="w-3.5 h-3.5" />
+              )}
+              <span>{sortMode === 'name_asc' ? 'A-Z' : sortMode === 'name_desc' ? 'Z-A' : '最近'}</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Sources List / Grouped Categories */}
@@ -452,6 +557,17 @@ export function SourceSidebar({
           <div className="text-center py-10 px-3 text-xs text-[#5E5B53]">
             <FileUp className="w-7 h-7 mx-auto mb-2 text-[#C4BCAE]" />
             拖入文件或粘贴网页链接即可开始精读与划线笔记
+          </div>
+        ) : filteredAndSortedSources.length === 0 ? (
+          <div className="text-center py-10 px-3 text-xs text-[#5E5B53] space-y-2">
+            <div>未找到匹配 “{searchQuery.trim()}” 的素材</div>
+            <button
+              type="button"
+              onClick={() => setSearchQuery('')}
+              className="px-2.5 py-1 rounded-lg border border-[#E5E0D5] bg-white text-[11px] font-medium text-[#1C1B18] hover:border-[#B45309] cursor-pointer"
+            >
+              清空检索
+            </button>
           </div>
         ) : groupByCategory ? (
           groupedSources.map(([cat, items]) => {
@@ -491,7 +607,7 @@ export function SourceSidebar({
             );
           })
         ) : (
-          sources.map((src, idx) => renderSourceItem(src, idx))
+          filteredAndSortedSources.map((src, idx) => renderSourceItem(src, idx))
         )}
       </div>
     </aside>
