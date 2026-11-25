@@ -54,6 +54,7 @@ class SourceSummary(BaseModel):
     page_count: int = 0
     word_count: int = 0
     highlight_count: int = 0
+    is_scanned: bool = False
     status: str = "ready"
     error_message: str | None = None
     created_at: str
@@ -150,10 +151,15 @@ class HighlightOut(BaseModel):
     end_offset: int | None = None
     prefix_text: str = ""
     suffix_text: str = ""
+    image_url: str | None = None
     conversation_id: str | None = None
     messages: list[MessageOut] = Field(default_factory=list)
     created_at: str
     updated_at: str
+
+
+class OcrHighlightRequest(BaseModel):
+    model: str | None = None
 
 
 class AskHighlightRequest(BaseModel):

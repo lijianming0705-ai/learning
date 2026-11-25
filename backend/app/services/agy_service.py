@@ -152,7 +152,10 @@ class AgyWorker:
                         yield ("status", "generating")
                 elif ev_type == "step_update":
                     su = event_obj.get("step_update") or {}
-                    if su.get("step_type") == "agent_response":
+                    st_type = su.get("step_type")
+                    if st_type == "tool" and su.get("state") == "ACTIVE":
+                        yield ("status", "analyzing_image")
+                    elif st_type == "agent_response":
                         if not emitted_generating:
                             emitted_generating = True
                             yield ("status", "generating")
@@ -377,15 +380,28 @@ def build_highlight_prompt(
     rag_memories: list[RagMemoryRef],
     question: str,
     extra_context: str | None = None,
+    image_path: str | None = None,
 ) -> str:
     prior_block = _format_prior_turns(prior_messages)
-    sections = [
-        "你是一个个人学习平台的 AI 导师。请直接根据下面提供的学习素材、划线片段、个人笔记与检索到的 RAG 历史记忆来清晰、严谨地回答用户问题。",
-        "重要约束：不要调用任何文件读写、Shell 命令、浏览器或代码工具；直接输出 Markdown 格式的学习解答。默认使用与用户提问一致的语言（中文提问则用中文回答）。",
-        f"【所在资料】《{highlight.source_title}》 第 {highlight.page_number} 页",
-    ]
+    if image_path:
+        sections = [
+            "你是一个具备多模态视觉与 OCR 能力的个人学习 AI 导师。",
+            f"用户提供了一张从学习资料框选出来的截图文件，路径为：{image_path}",
+            f"请务必先调用 read_file（或 view_file）工具读取查看该图片 {image_path}，识别其中的文字、公式、表格或图表语义，再结合下方信息严谨回答用户问题。",
+            "重要约束：除读取上述指定截图外，不要调用任何其他文件写入、Shell 命令、浏览器或代码工具；直接输出 Markdown 格式的学习解答。默认使用与用户提问一致的语言（中文提问则用中文回答）。",
+            f"【所在资料】《{highlight.source_title}》 第 {highlight.page_number} 页",
+        ]
+    else:
+        sections = [
+            "你是一个个人学习平台的 AI 导师。请直接根据下面提供的学习素材、划线片段、个人笔记与检索到的 RAG 历史记忆来清晰、严谨地回答用户问题。",
+            "重要约束：不要调用任何文件读写、Shell 命令、浏览器或代码工具；直接输出 Markdown 格式的学习解答。默认使用与用户提问一致的语言（中文提问则用中文回答）。",
+            f"【所在资料】《{highlight.source_title}》 第 {highlight.page_number} 页",
+        ]
+
     if highlight.quote_text:
-        sections.append(f"【用户划线片段】\n{highlight.quote_text}")
+        sections.append(f"【用户划线/OCR 文本】\n{highlight.quote_text}")
+    elif image_path:
+        sections.append("【用户划线方式】区域框选截图（请直接查看图片进行 OCR 与语义理解）")
     else:
         sections.append("【用户划线方式】PDF 框选区域（请结合所在页面上下文理解）")
 
@@ -487,6 +503,45 @@ async def classify_sources_with_agy(
             raise RuntimeError(str(data))
     raw_output = result_text or "".join(chunks)
     return parse_classification_json(raw_output)
+
+
+def build_ocr_prompt(*, image_path: str, source_title: str, page_number: int) -> str:
+    return (
+        "你是一个高精度的学术 OCR 与图文识别助手。\n"
+        f"请调用 read_file（或 view_file）工具读取图片：{image_path}（来自《{source_title}》第 {page_number} 页框选区域）。\n"
+        "请准确转录图片中的全部可见文字，保持原有的段落、列表或标题结构；若包含数学公式请使用标准 LaTeX 语法（$...$ 或 $$...$$）；"
+        "若主要是图表或示意图，请先提取图内所有文字与标签，再用简洁清晰的中文概括其核心含义。\n"
+        "重要约束：除读取上述指定图片外不要调用其他工具，也不要输出多余寒暄，直接输出识别结果。"
+    )
+
+
+async def ocr_highlight_image(
+    *,
+    highlight_id: str,
+    image_path: str,
+    source_title: str,
+    page_number: int,
+    model: str,
+) -> str:
+    prompt = build_ocr_prompt(
+        image_path=image_path,
+        source_title=source_title,
+        page_number=page_number,
+    )
+    chunks: list[str] = []
+    result_text = ""
+    async for kind, data in agy_service.stream_prompt(
+        thread_key=f"ocr:{highlight_id}",
+        model=model,
+        prompt=prompt,
+    ):
+        if kind == "delta":
+            chunks.append(str(data))
+        elif kind == "result" and isinstance(data, dict):
+            result_text = str(data.get("response") or "")
+        elif kind == "error":
+            raise RuntimeError(str(data))
+    return (result_text or "".join(chunks)).strip()
 
 
 agy_service = AgyService()

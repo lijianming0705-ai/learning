@@ -31,6 +31,7 @@ export interface SourceSummary {
   page_count: number;
   word_count: number;
   highlight_count: number;
+  is_scanned: boolean;
   status: string;
   error_message: string | null;
   created_at: string;
@@ -99,6 +100,7 @@ export interface Highlight {
   end_offset: number | null;
   prefix_text: string;
   suffix_text: string;
+  image_url: string | null;
   conversation_id: string | null;
   messages: ChatMessage[];
   created_at: string;

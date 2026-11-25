@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS sources (
     plain_text TEXT NOT NULL DEFAULT '',
     page_count INTEGER NOT NULL DEFAULT 0,
     word_count INTEGER NOT NULL DEFAULT 0,
+    is_scanned INTEGER NOT NULL DEFAULT 0,
     status TEXT NOT NULL DEFAULT 'ready',
     error_message TEXT,
     created_at TEXT NOT NULL,
@@ -68,6 +69,7 @@ CREATE TABLE IF NOT EXISTS highlights (
     end_offset INTEGER,
     prefix_text TEXT NOT NULL DEFAULT '',
     suffix_text TEXT NOT NULL DEFAULT '',
+    image_path TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
@@ -140,6 +142,11 @@ def init_study_db() -> None:
         cols = {r["name"] for r in conn.execute("PRAGMA table_info(sources)").fetchall()}
         if "category" not in cols:
             conn.execute("ALTER TABLE sources ADD COLUMN category TEXT NOT NULL DEFAULT ''")
+        if "is_scanned" not in cols:
+            conn.execute("ALTER TABLE sources ADD COLUMN is_scanned INTEGER NOT NULL DEFAULT 0")
+        hl_cols = {r["name"] for r in conn.execute("PRAGMA table_info(highlights)").fetchall()}
+        if "image_path" not in hl_cols:
+            conn.execute("ALTER TABLE highlights ADD COLUMN image_path TEXT")
         for key, value in DEFAULT_SETTINGS.items():
             conn.execute(
                 "INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)",

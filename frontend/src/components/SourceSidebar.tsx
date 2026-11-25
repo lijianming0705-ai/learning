@@ -364,6 +364,11 @@ export function SourceSidebar({
             <span className={`px-1.5 py-0.2 rounded border text-[10px] font-medium shrink-0 ${badge.cls}`}>
               {badge.label}
             </span>
+            {src.is_scanned && (
+              <span className="px-1.5 py-0.2 rounded border border-amber-300 bg-amber-50 text-amber-800 text-[10px] font-medium shrink-0">
+                扫描件
+              </span>
+            )}
             {!groupByCategory && src.category && (
               <span className="px-1.5 py-0.2 rounded bg-[#EFECE5] text-[#4A473F] text-[10px] truncate max-w-[84px]">
                 {src.category}

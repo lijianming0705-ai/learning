@@ -29,6 +29,7 @@ class ParsedSource:
     word_count: int
     pages: list[tuple[int, str]]
     chunks: list[SourceChunk]
+    is_scanned: bool = False
 
 
 _DANGEROUS_TAGS = {"script", "style", "iframe", "object", "embed", "form", "noscript", "svg"}
@@ -110,13 +111,29 @@ def parse_pdf(file_path: Path, fallback_title: str) -> ParsedSource:
         pages: list[tuple[int, str]] = []
         chunks: list[SourceChunk] = []
         all_text_parts: list[str] = []
+        total_non_ws = 0
+        scanned_like_pages = 0
+        any_images = False
 
         for idx, page in enumerate(doc, start=1):
             text = (page.get_text("text") or "").strip()
             pages.append((idx, text))
+            non_ws = len("".join(text.split()))
+            total_non_ws += non_ws
+            has_images = len(page.get_images(full=False)) > 0
+            if has_images:
+                any_images = True
+            if non_ws < 20 and has_images:
+                scanned_like_pages += 1
             if text:
                 all_text_parts.append(text)
                 chunks.extend(chunk_text(text, page_number=idx))
+
+        page_count = len(doc)
+        avg_chars = (total_non_ws / page_count) if page_count > 0 else 0.0
+        is_scanned = page_count > 0 and any_images and (
+            avg_chars < 35 or (scanned_like_pages / page_count) >= 0.6
+        )
 
         plain_text = "\n\n".join(all_text_parts)
         return ParsedSource(
@@ -124,11 +141,52 @@ def parse_pdf(file_path: Path, fallback_title: str) -> ParsedSource:
             title=title,
             html_content="",
             plain_text=plain_text,
-            page_count=len(doc),
+            page_count=page_count,
             word_count=count_words(plain_text),
             pages=pages,
             chunks=chunks,
+            is_scanned=is_scanned,
         )
+    finally:
+        doc.close()
+
+
+def crop_pdf_region(
+    pdf_path: Path,
+    page_number: int,
+    rects: list[dict[str, float]],
+    output_path: Path,
+) -> Path:
+    if not rects:
+        raise ValueError("No bounding rects supplied for PDF crop")
+    doc = fitz.open(str(pdf_path))
+    try:
+        page_idx = max(0, min(len(doc) - 1, page_number - 1))
+        page = doc[page_idx]
+        pr = page.rect
+
+        min_x = min(max(0.0, float(r["x"])) for r in rects)
+        min_y = min(max(0.0, float(r["y"])) for r in rects)
+        max_x = max(min(1.0, float(r["x"]) + float(r["width"])) for r in rects)
+        max_y = max(min(1.0, float(r["y"]) + float(r["height"])) for r in rects)
+
+        pad = 3.0
+        clip = fitz.Rect(
+            max(pr.x0, pr.x0 + min_x * pr.width - pad),
+            max(pr.y0, pr.y0 + min_y * pr.height - pad),
+            min(pr.x1, pr.x0 + max_x * pr.width + pad),
+            min(pr.y1, pr.y0 + max_y * pr.height + pad),
+        )
+        if clip.width < 2 or clip.height < 2:
+            clip = pr
+
+        max_dim = max(clip.width, clip.height)
+        zoom = min(2.5, 2200.0 / max(1.0, max_dim))
+        zoom = max(1.25, zoom)
+        pix = page.get_pixmap(clip=clip, matrix=fitz.Matrix(zoom, zoom), alpha=False)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        pix.save(str(output_path))
+        return output_path
     finally:
         doc.close()
 

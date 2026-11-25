@@ -15,17 +15,20 @@ class AppPaths:
     rag_db_path: Path
     uploads_dir: Path
     agy_workdir: Path
+    crops_dir: Path
 
 
 def get_paths() -> AppPaths:
     raw_data = os.environ.get("STUDY_DATA_DIR")
     data_dir = Path(raw_data).expanduser().resolve() if raw_data else (PROJECT_ROOT / "data")
+    agy_workdir = data_dir / "agy-workdir"
     return AppPaths(
         data_dir=data_dir,
         study_db_path=data_dir / "study.sqlite",
         rag_db_path=data_dir / "rag.sqlite",
         uploads_dir=data_dir / "uploads",
-        agy_workdir=data_dir / "agy-workdir",
+        agy_workdir=agy_workdir,
+        crops_dir=agy_workdir / "crops",
     )
 
 
@@ -34,6 +37,7 @@ def ensure_data_dirs() -> AppPaths:
     paths.data_dir.mkdir(parents=True, exist_ok=True)
     paths.uploads_dir.mkdir(parents=True, exist_ok=True)
     paths.agy_workdir.mkdir(parents=True, exist_ok=True)
+    paths.crops_dir.mkdir(parents=True, exist_ok=True)
     return paths
 
 

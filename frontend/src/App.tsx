@@ -70,6 +70,7 @@ export default function App() {
   const [highlightStreams, setHighlightStreams] = useState<
     Record<string, { text: string; status: string; memories: RagMemoryRef[] }>
   >({});
+  const [ocrLoadingMap, setOcrLoadingMap] = useState<Record<string, boolean>>({});
 
   // Notebook chat state
   const [conversations, setConversations] = useState<ConversationSummary[]>([]);
@@ -324,9 +325,26 @@ export default function App() {
   };
 
   const QUICK_TRANSLATE_PROMPT =
-    '请将这段划线英文翻译成自然流畅的中文，并拆解解释其中的核心词汇、专业术语、固定搭配与句式结构。';
+    '请将这段内容翻译成自然流畅的中文，并拆解解释其中的核心词汇、专业术语、固定搭配与关键语义。';
 
-  const handleSelectionAction = async (mode: 'highlight' | 'note' | 'ask' | 'translate') => {
+  const handleOcrHighlight = async (highlightId: string) => {
+    setOcrLoadingMap((prev) => ({ ...prev, [highlightId]: true }));
+    try {
+      const updated = await api.ocrHighlight(highlightId, selectedModel);
+      setHighlights((prev) => prev.map((h) => (h.id === highlightId ? updated : h)));
+      refreshSystem().catch(() => {});
+    } catch (err) {
+      showError(err instanceof Error ? err.message : 'OCR 识别失败');
+    } finally {
+      setOcrLoadingMap((prev) => {
+        const copy = { ...prev };
+        delete copy[highlightId];
+        return copy;
+      });
+    }
+  };
+
+  const handleSelectionAction = async (mode: 'highlight' | 'note' | 'ask' | 'translate' | 'ocr') => {
     if (!pendingSelection || !activeSource) return;
     try {
       const created = await api.createHighlight(activeSource.id, {
@@ -346,7 +364,11 @@ export default function App() {
       setRightTab('remarks');
       setPendingSelection(null);
       window.getSelection()?.removeAllRanges();
-      if (mode === 'translate') {
+      if (mode === 'ocr') {
+        setRightCollapsed(false);
+        if (isCompactViewport) setMobileDrawer('right');
+        void handleOcrHighlight(created.id);
+      } else if (mode === 'translate') {
         setRightCollapsed(false);
         if (isCompactViewport) setMobileDrawer('right');
         void handleAskHighlight(created.id, QUICK_TRANSLATE_PROMPT, true, settings.cross_notebook_rag);
@@ -809,6 +831,7 @@ export default function App() {
                       activeHighlightId={activeHighlightId}
                       focusIntent={focusIntent}
                       streamingMap={highlightStreams}
+                      ocrLoadingMap={ocrLoadingMap}
                       quotedContext={quotedContext}
                       models={models}
                       selectedModel={selectedModel}
@@ -824,6 +847,7 @@ export default function App() {
                       onUpdateHighlight={handleUpdateHighlight}
                       onDeleteHighlight={handleDeleteHighlight}
                       onAskHighlight={handleAskHighlight}
+                      onOcrHighlight={handleOcrHighlight}
                       onJumpToMemory={handleJumpToMemory}
                     />
                   )}

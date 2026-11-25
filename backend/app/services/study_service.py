@@ -28,7 +28,7 @@ from app.schemas import (
     SourceSummary,
     SourceUpdate,
 )
-from app.services.source_parser import ParsedSource, chunk_text
+from app.services.source_parser import ParsedSource, chunk_text, crop_pdf_region
 
 
 def new_id() -> str:
@@ -158,6 +158,10 @@ def delete_notebook(notebook_id: str) -> bool:
             "SELECT file_path FROM sources WHERE notebook_id = ? AND file_path IS NOT NULL",
             (notebook_id,),
         ).fetchall()
+        crop_rows = conn.execute(
+            "SELECT image_path FROM highlights WHERE notebook_id = ? AND image_path IS NOT NULL",
+            (notebook_id,),
+        ).fetchall()
         cur = conn.execute("DELETE FROM notebooks WHERE id = ?", (notebook_id,))
         if cur.rowcount == 0:
             return False
@@ -166,6 +170,10 @@ def delete_notebook(notebook_id: str) -> bool:
         fp = Path(r["file_path"])
         if fp.exists():
             fp.unlink(missing_ok=True)
+    for cr in crop_rows:
+        cp = Path(cr["image_path"])
+        if cp.exists():
+            cp.unlink(missing_ok=True)
     uploads_nb_dir = ensure_data_dirs().uploads_dir / notebook_id
     if uploads_nb_dir.exists() and not any(uploads_nb_dir.iterdir()):
         uploads_nb_dir.rmdir()
@@ -264,9 +272,9 @@ def save_parsed_source(
             """
             INSERT INTO sources (
                 id, notebook_id, type, title, original_filename, source_url, file_path,
-                html_content, plain_text, page_count, word_count, status, error_message,
+                html_content, plain_text, page_count, word_count, is_scanned, status, error_message,
                 created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ready', NULL, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ready', NULL, ?, ?)
             """,
             (
                 source_id,
@@ -280,6 +288,7 @@ def save_parsed_source(
                 parsed.plain_text,
                 parsed.page_count,
                 parsed.word_count,
+                1 if parsed.is_scanned else 0,
                 now,
                 now,
             ),
@@ -370,11 +379,17 @@ def delete_source(source_id: str) -> bool:
         row = conn.execute("SELECT file_path, notebook_id FROM sources WHERE id = ?", (source_id,)).fetchone()
         if not row:
             return False
+        crop_rows = conn.execute(
+            "SELECT image_path FROM highlights WHERE source_id = ? AND image_path IS NOT NULL",
+            (source_id,),
+        ).fetchall()
         conn.execute("DELETE FROM sources WHERE id = ?", (source_id,))
         conn.execute("UPDATE notebooks SET updated_at = ? WHERE id = ?", (utc_now_iso(), row["notebook_id"]))
 
     if row["file_path"]:
         Path(row["file_path"]).unlink(missing_ok=True)
+    for cr in crop_rows:
+        Path(cr["image_path"]).unlink(missing_ok=True)
     rag_store.delete_by_filter(source_id=source_id)
     return True
 
@@ -391,6 +406,7 @@ def _row_to_source_summary(row: sqlite3.Row) -> SourceSummary:
         page_count=int(row["page_count"]),
         word_count=int(row["word_count"]),
         highlight_count=int(row["highlight_count"]),
+        is_scanned=bool(row["is_scanned"]) if "is_scanned" in row.keys() else False,
         status=row["status"],
         error_message=row["error_message"],
         created_at=row["created_at"],
@@ -450,7 +466,7 @@ def create_highlight(source_id: str, payload: HighlightCreate) -> HighlightOut |
     with get_db() as conn:
         src = conn.execute(
             """
-            SELECT s.id, s.notebook_id, s.title, n.title AS notebook_title
+            SELECT s.id, s.notebook_id, s.title, s.type, s.file_path, s.is_scanned, n.title AS notebook_title
             FROM sources s
             JOIN notebooks n ON n.id = s.notebook_id
             WHERE s.id = ?
@@ -462,14 +478,33 @@ def create_highlight(source_id: str, payload: HighlightCreate) -> HighlightOut |
 
         hl_id = new_id()
         now = utc_now_iso()
-        rects_json = json.dumps([r.model_dump() for r in payload.rects])
+        rects_list = [r.model_dump() for r in payload.rects]
+        rects_json = json.dumps(rects_list)
+
+        image_path_str: str | None = None
+        should_crop = (
+            src["type"] == "pdf"
+            and bool(src["file_path"])
+            and bool(rects_list)
+            and (payload.anchor_type == "area" or bool(src["is_scanned"]))
+        )
+        if should_crop:
+            pdf_file = Path(src["file_path"])
+            if pdf_file.exists():
+                crop_out = ensure_data_dirs().crops_dir / f"{hl_id}.png"
+                try:
+                    crop_pdf_region(pdf_file, payload.page_number, rects_list, crop_out)
+                    image_path_str = str(crop_out)
+                except Exception:
+                    image_path_str = None
+
         conn.execute(
             """
             INSERT INTO highlights (
                 id, notebook_id, source_id, color, quote_text, note_text,
                 anchor_type, page_number, rects_json, start_offset, end_offset,
-                prefix_text, suffix_text, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                prefix_text, suffix_text, image_path, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 hl_id,
@@ -485,6 +520,7 @@ def create_highlight(source_id: str, payload: HighlightCreate) -> HighlightOut |
                 payload.end_offset,
                 payload.prefix_text,
                 payload.suffix_text,
+                image_path_str,
                 now,
                 now,
             ),
@@ -542,11 +578,27 @@ def update_highlight(highlight_id: str, payload: HighlightUpdate) -> HighlightOu
     return get_highlight(highlight_id)
 
 
+def get_highlight_image_path(highlight_id: str) -> Path | None:
+    with get_db() as conn:
+        row = conn.execute("SELECT image_path FROM highlights WHERE id = ?", (highlight_id,)).fetchone()
+    if not row or not row["image_path"]:
+        return None
+    p = Path(row["image_path"])
+    return p if p.exists() else None
+
+
+def update_highlight_quote_from_ocr(highlight_id: str, ocr_text: str) -> HighlightOut | None:
+    return update_highlight(highlight_id, HighlightUpdate(quote_text=ocr_text))
+
+
 def delete_highlight(highlight_id: str) -> bool:
     with get_db() as conn:
+        row = conn.execute("SELECT image_path FROM highlights WHERE id = ?", (highlight_id,)).fetchone()
         cur = conn.execute("DELETE FROM highlights WHERE id = ?", (highlight_id,))
         if cur.rowcount == 0:
             return False
+    if row and row["image_path"]:
+        Path(row["image_path"]).unlink(missing_ok=True)
     rag_store.delete_by_filter(highlight_id=highlight_id)
     return True
 
@@ -613,6 +665,8 @@ def _hydrate_highlights(conn: sqlite3.Connection, rows: list[sqlite3.Row]) -> li
         cid = conv_by_hl.get(r["id"])
         raw_rects = json.loads(r["rects_json"] or "[]")
         rects = [HighlightRect(**item) for item in raw_rects]
+        raw_img = r["image_path"] if "image_path" in r.keys() else None
+        has_img = bool(raw_img and Path(raw_img).exists())
         result.append(
             HighlightOut(
                 id=r["id"],
@@ -630,6 +684,7 @@ def _hydrate_highlights(conn: sqlite3.Connection, rows: list[sqlite3.Row]) -> li
                 end_offset=r["end_offset"],
                 prefix_text=r["prefix_text"],
                 suffix_text=r["suffix_text"],
+                image_url=f"/api/highlights/{r['id']}/image" if has_img else None,
                 conversation_id=cid,
                 messages=msgs_by_conv.get(cid, []) if cid else [],
                 created_at=r["created_at"],

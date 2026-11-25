@@ -134,8 +134,61 @@ def test_full_study_workflow_and_rag_persistence(test_client, tmp_path: Path) ->
     assert cls_resp.status_code == 200
     cls_data = cls_resp.json()
     assert cls_data["classified_count"] == 1
-    assert "核心论文" in cls_data["categories"]
+    assert cls_data["categories"] == ["核心论文"] or "核心论文" in cls_data["categories"]
     assert cls_data["sources"][0]["category"] == "核心论文"
+
+    # 9b. Scanned PDF upload -> area crop -> OCR -> visual AI Q&A
+    tmp_src = fitz.open()
+    tmp_p = tmp_src.new_page(width=420, height=180)
+    tmp_p.insert_text((30, 80), "Scanned Formula: E = mc^2", fontsize=14)
+    raster_png = tmp_src[0].get_pixmap(matrix=fitz.Matrix(2, 2)).tobytes("png")
+    tmp_src.close()
+
+    scanned_pdf = tmp_path / "scanned_book.pdf"
+    sdoc = fitz.open()
+    spage = sdoc.new_page(width=420, height=180)
+    spage.insert_image(spage.rect, stream=raster_png)
+    sdoc.save(str(scanned_pdf))
+    sdoc.close()
+
+    with open(scanned_pdf, "rb") as f:
+        scan_up = test_client.post(
+            f"/api/notebooks/{nb_id}/sources/upload",
+            files=[("files", ("scanned_book.pdf", f, "application/pdf"))],
+        )
+    assert scan_up.status_code == 201
+    scan_src = scan_up.json()[0]
+    assert scan_src["is_scanned"] is True
+
+    area_hl = test_client.post(
+        f"/api/sources/{scan_src['id']}/highlights",
+        json={
+            "color": "sky",
+            "quote_text": "",
+            "note_text": "",
+            "anchor_type": "area",
+            "page_number": 1,
+            "rects": [{"x": 0.05, "y": 0.15, "width": 0.8, "height": 0.5}],
+        },
+    )
+    assert area_hl.status_code == 201
+    area_data = area_hl.json()
+    assert area_data["image_url"] == f"/api/highlights/{area_data['id']}/image"
+
+    img_resp = test_client.get(area_data["image_url"])
+    assert img_resp.status_code == 200
+    assert img_resp.content[:8] == b"\x89PNG\r\n\x1a\n"
+
+    ocr_resp = test_client.post(f"/api/highlights/{area_data['id']}/ocr", json={})
+    assert ocr_resp.status_code == 200
+    assert "E = mc^2" in ocr_resp.json()["quote_text"]
+
+    scan_ask = test_client.post(
+        f"/api/highlights/{area_data['id']}/ask",
+        json={"question": "解释框选图片里的公式", "use_rag": True},
+    )
+    assert scan_ask.status_code == 200
+    assert "event: done" in scan_ask.text
 
     # 10. Reindex & stats
     stats_resp = test_client.get("/api/rag/stats")

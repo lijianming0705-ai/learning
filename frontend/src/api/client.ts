@@ -120,6 +120,12 @@ export const api = {
     }),
   deleteHighlight: (highlightId: string) =>
     requestJson<{ deleted: boolean }>(`/api/highlights/${highlightId}`, { method: 'DELETE' }),
+  ocrHighlight: (highlightId: string, model?: string) =>
+    requestJson<Highlight>(`/api/highlights/${highlightId}/ocr`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: model || null }),
+    }),
 
   listConversations: (notebookId: string) =>
     requestJson<ConversationSummary[]>(`/api/notebooks/${notebookId}/conversations`),

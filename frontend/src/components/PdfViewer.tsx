@@ -420,9 +420,10 @@ export function PdfViewer({
   const [displayScale, setDisplayScale] = useState(1.25);
   const [basePageWidth, setBasePageWidth] = useState<number | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const [areaMode, setAreaMode] = useState(false);
+  const [areaMode, setAreaMode] = useState(Boolean(source.is_scanned));
   const [paginatedMode, setPaginatedMode] = useState(einkMode);
   const [fitWidthMode, setFitWidthMode] = useState(true);
+  const [dismissedScanHint, setDismissedScanHint] = useState(false);
 
   const pageRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
@@ -470,6 +471,11 @@ export function PdfViewer({
       setRenderScale(rounded);
     },
   });
+
+  useEffect(() => {
+    setAreaMode(Boolean(source.is_scanned));
+    setDismissedScanHint(false);
+  }, [source.id, source.is_scanned]);
 
   useEffect(() => {
     let cancelled = false;
@@ -735,6 +741,22 @@ export function PdfViewer({
           </div>
         </div>
       </div>
+
+      {/* Scanned PDF Hint Banner */}
+      {source.is_scanned && !dismissedScanHint && (
+        <div className="shrink-0 bg-amber-50 border-b border-amber-200 px-3 sm:px-4 py-1.5 flex items-center justify-between gap-2 text-[11px] text-amber-900 eink-surface">
+          <span>
+            已识别为<strong>扫描件 PDF</strong> · 已自动开启「框选」模式：框选任意区域即可截图并发送给 AI 进行 OCR 识别与语义问答。
+          </span>
+          <button
+            type="button"
+            onClick={() => setDismissedScanHint(true)}
+            className="text-amber-800 hover:underline shrink-0 cursor-pointer"
+          >
+            知道了
+          </button>
+        </div>
+      )}
 
       {/* Pages Scroll Area */}
       <div

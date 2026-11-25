@@ -9,20 +9,25 @@ import {
   Loader2,
   MapPin,
   Save,
+  ScanText,
   Send,
   Sparkles,
   Trash2,
+  X,
+  ZoomIn,
 } from 'lucide-react';
 import type { AgyModel, Highlight, HighlightColor, RagMemoryRef } from '../types';
 import { HIGHLIGHT_COLORS } from './SelectionPopover';
 
-const QUICK_PROMPTS = ['翻译并解释', '通俗解释', '提炼核心要点', '举个实际例子', '结合历史笔记对比'];
+const TEXT_QUICK_PROMPTS = ['翻译并解释', '通俗解释', '提炼核心要点', '举个实际例子', '结合历史笔记对比'];
+const IMAGE_QUICK_PROMPTS = ['OCR 识别并解释', '翻译图片内容', '讲解公式或图表含义', '提炼核心要点'];
 
 interface RemarksPanelProps {
   highlights: Highlight[];
   activeHighlightId: string | null;
   focusIntent: { highlightId: string; mode: 'note' | 'ask' } | null;
   streamingMap: Record<string, { text: string; status: string; memories: RagMemoryRef[] }>;
+  ocrLoadingMap: Record<string, boolean>;
   quotedContext: string | null;
   models: AgyModel[];
   selectedModel: string;
@@ -32,6 +37,7 @@ interface RemarksPanelProps {
   onUpdateHighlight: (id: string, patch: { color?: HighlightColor; note_text?: string }) => Promise<void>;
   onDeleteHighlight: (id: string) => Promise<void>;
   onAskHighlight: (highlightId: string, question: string, useRag: boolean, crossNotebook: boolean) => Promise<void>;
+  onOcrHighlight: (highlightId: string) => Promise<void>;
   onJumpToMemory: (mem: RagMemoryRef) => void;
 }
 
@@ -40,6 +46,7 @@ export function RemarksPanel({
   activeHighlightId,
   focusIntent,
   streamingMap,
+  ocrLoadingMap,
   quotedContext,
   models,
   selectedModel,
@@ -49,6 +56,7 @@ export function RemarksPanel({
   onUpdateHighlight,
   onDeleteHighlight,
   onAskHighlight,
+  onOcrHighlight,
   onJumpToMemory,
 }: RemarksPanelProps) {
   const [filterColor, setFilterColor] = useState<string>('all');
@@ -58,6 +66,7 @@ export function RemarksPanel({
   const [useRag, setUseRag] = useState(true);
   const [crossNotebook, setCrossNotebook] = useState(true);
   const [expandedRefs, setExpandedRefs] = useState<Record<string, boolean>>({});
+  const [lightboxImageUrl, setLightboxImageUrl] = useState<string | null>(null);
 
   const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const noteInputRefs = useRef<Record<string, HTMLTextAreaElement | null>>({});
@@ -290,10 +299,62 @@ export function RemarksPanel({
                       </div>
                     </div>
 
-                    {/* Quoted snippet */}
-                    <blockquote className="text-xs text-[#2E2C26] bg-[#FAF8F4] border-l-2 border-[#D6CFC0] px-2.5 py-1.5 rounded-r-md whitespace-pre-wrap break-words">
-                      {hl.quote_text || '（PDF 图像 / 公式框选区域）'}
-                    </blockquote>
+                    {/* Cropped Image Preview for Area / Scanned PDF */}
+                    {hl.image_url && (
+                      <div className="space-y-1.5">
+                        <div className="relative group rounded-lg border border-[#E5E0D5] bg-[#FAF8F4] overflow-hidden">
+                          <img
+                            src={hl.image_url}
+                            alt={`P.${hl.page_number} 框选截图`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setLightboxImageUrl(hl.image_url);
+                            }}
+                            className="w-full max-h-44 object-contain cursor-zoom-in bg-white"
+                          />
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setLightboxImageUrl(hl.image_url);
+                            }}
+                            title="放大查看框选原图"
+                            className="absolute top-1.5 right-1.5 p-1 rounded-md bg-black/60 text-white opacity-100 md:opacity-0 md:group-hover:opacity-100 transition cursor-pointer"
+                          >
+                            <ZoomIn className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[11px] text-[#5E5B53]">
+                            {hl.quote_text ? '已提取 OCR 文本（已同步 RAG）' : '截图将随提问自动发送给 AI 识别'}
+                          </span>
+                          <button
+                            type="button"
+                            disabled={Boolean(ocrLoadingMap[hl.id])}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void onOcrHighlight(hl.id);
+                            }}
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded-md border border-[#E5E0D5] bg-[#FAF8F4] hover:border-[#B45309] text-[11px] font-medium text-[#1C1B18] cursor-pointer disabled:opacity-50"
+                          >
+                            {ocrLoadingMap[hl.id] ? (
+                              <Loader2 className="w-3 h-3 animate-spin text-[#B45309]" />
+                            ) : (
+                              <ScanText className="w-3 h-3 text-[#B45309]" />
+                            )}
+                            <span>{ocrLoadingMap[hl.id] ? 'OCR 识别中...' : hl.quote_text ? '重新 OCR' : 'OCR 识别文字'}</span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Quoted snippet / OCR Text */}
+                    {(hl.quote_text || !hl.image_url) && (
+                      <blockquote className="text-xs text-[#2E2C26] bg-[#FAF8F4] border-l-2 border-[#D6CFC0] px-2.5 py-1.5 rounded-r-md whitespace-pre-wrap break-words">
+                        {hl.quote_text || '（PDF 图像 / 公式框选区域）'}
+                      </blockquote>
+                    )}
 
                     {/* Editable Note */}
                     <div className="space-y-1">
@@ -408,7 +469,9 @@ export function RemarksPanel({
                               <span>
                                 {stream.status === 'connecting_agy'
                                   ? '正在唤醒 agy CLI 会话...'
-                                  : 'agy 正在思考与生成...'}
+                                  : stream.status === 'analyzing_image'
+                                    ? 'AI 正在查看框选截图并 OCR 识别...'
+                                    : 'agy 正在思考与生成...'}
                               </span>
                             </div>
                             {stream.text && (
@@ -424,7 +487,7 @@ export function RemarksPanel({
                     {/* Quick prompt chips + Ask input */}
                     <div className="space-y-1.5 pt-1">
                       <div className="flex flex-wrap gap-1">
-                        {QUICK_PROMPTS.map((qp) => (
+                        {(hl.image_url ? IMAGE_QUICK_PROMPTS : TEXT_QUICK_PROMPTS).map((qp) => (
                           <button
                             key={qp}
                             type="button"
@@ -457,7 +520,7 @@ export function RemarksPanel({
                           type="text"
                           value={qDraft}
                           onChange={(e) => setQuestionDrafts((prev) => ({ ...prev, [hl.id]: e.target.value }))}
-                          placeholder="针对这段划线向 AI 提问..."
+                          placeholder={hl.image_url ? '针对框选截图内容向 AI 提问...' : '针对这段划线向 AI 提问...'}
                           className="flex-1 rounded-lg border border-[#E5E0D5] bg-white px-2.5 py-1.5 text-xs focus:outline-none focus:border-[#B45309]"
                         />
                         <button
@@ -476,6 +539,32 @@ export function RemarksPanel({
           })
         )}
       </div>
+
+      {lightboxImageUrl && (
+        <div
+          onClick={() => setLightboxImageUrl(null)}
+          className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4"
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="relative max-w-4xl max-h-[88vh] bg-white rounded-2xl p-2 shadow-2xl"
+          >
+            <button
+              type="button"
+              onClick={() => setLightboxImageUrl(null)}
+              className="absolute -top-3 -right-3 w-8 h-8 rounded-full bg-black text-white flex items-center justify-center shadow-lg cursor-pointer"
+              aria-label="关闭大图"
+            >
+              <X className="w-4 h-4" />
+            </button>
+            <img
+              src={lightboxImageUrl}
+              alt="框选截图大图预览"
+              className="max-w-full max-h-[82vh] object-contain rounded-xl"
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

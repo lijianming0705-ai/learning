@@ -37,6 +37,8 @@ def test_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
                 {"assignments": [{"id": sid, "category": "核心论文"} for sid in ids]},
                 ensure_ascii=False,
             )
+        elif thread_key.startswith("ocr:"):
+            answer = "识别文本：E = mc^2（质能等价公式）"
         else:
             answer = f"这是针对问题的精炼解析（模型 {model}）：注意力机制通过 Query、Key、Value 计算相关性权重。"
         yield ("delta", answer[:18])

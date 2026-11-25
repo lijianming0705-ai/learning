@@ -4,12 +4,12 @@ import json
 from typing import AsyncIterator
 
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 
 from app.rag.store import rag_store
-from app.schemas import AskHighlightRequest, HighlightCreate, HighlightOut, HighlightUpdate
+from app.schemas import AskHighlightRequest, HighlightCreate, HighlightOut, HighlightUpdate, OcrHighlightRequest
 from app.services import study_service
-from app.services.agy_service import agy_service, build_highlight_prompt
+from app.services.agy_service import agy_service, build_highlight_prompt, ocr_highlight_image
 
 router = APIRouter(prefix="/api", tags=["highlights"])
 
@@ -47,6 +47,47 @@ async def delete_highlight(highlight_id: str) -> dict[str, bool]:
     if not ok:
         raise HTTPException(status_code=404, detail="Highlight not found")
     return {"deleted": True}
+
+
+@router.get("/highlights/{highlight_id}/image")
+async def get_highlight_image(highlight_id: str) -> FileResponse:
+    img_path = study_service.get_highlight_image_path(highlight_id)
+    if not img_path:
+        raise HTTPException(status_code=404, detail="Highlight image not found")
+    return FileResponse(path=img_path, media_type="image/png")
+
+
+@router.post("/highlights/{highlight_id}/ocr", response_model=HighlightOut)
+async def ocr_highlight(
+    highlight_id: str,
+    payload: OcrHighlightRequest | None = None,
+) -> HighlightOut:
+    hl = study_service.get_highlight(highlight_id)
+    if not hl:
+        raise HTTPException(status_code=404, detail="Highlight not found")
+    img_path = study_service.get_highlight_image_path(highlight_id)
+    if not img_path:
+        raise HTTPException(status_code=400, detail="当前划线没有关联截图，请先在 PDF 中使用框选模式截图")
+
+    settings = study_service.get_settings()
+    model = ((payload.model if payload else None) or settings.default_model).strip()
+    try:
+        ocr_text = await ocr_highlight_image(
+            highlight_id=highlight_id,
+            image_path=str(img_path),
+            source_title=hl.source_title,
+            page_number=hl.page_number,
+            model=model,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"OCR 识别失败: {exc}") from exc
+
+    if not ocr_text:
+        raise HTTPException(status_code=422, detail="未识别出有效内容，请尝试放大框选区域或切换模型重试")
+
+    updated = study_service.update_highlight_quote_from_ocr(highlight_id, ocr_text)
+    assert updated is not None
+    return updated
 
 
 @router.post("/highlights/{highlight_id}/ask")
@@ -96,6 +137,7 @@ async def ask_highlight_ai(highlight_id: str, payload: AskHighlightRequest) -> S
                 rag_refs.append(study_service.rag_hit_to_ref(hit))
 
     page_ctx = study_service.get_surrounding_page_context(hl.source_id, hl.page_number)
+    img_path = study_service.get_highlight_image_path(highlight_id)
     prompt = build_highlight_prompt(
         highlight=hl,
         page_context=page_ctx,
@@ -103,6 +145,7 @@ async def ask_highlight_ai(highlight_id: str, payload: AskHighlightRequest) -> S
         rag_memories=rag_refs,
         question=payload.question.strip(),
         extra_context=payload.extra_context,
+        image_path=str(img_path) if img_path else None,
     )
 
     async def event_stream() -> AsyncIterator[str]:

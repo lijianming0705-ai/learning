@@ -5,7 +5,7 @@ from pathlib import Path
 
 import fitz
 
-from app.services.source_parser import parse_docx, parse_html_article, parse_pdf, parse_text_file
+from app.services.source_parser import crop_pdf_region, parse_docx, parse_html_article, parse_pdf, parse_text_file
 
 
 def _create_minimal_docx(path: Path, paragraph_text: str) -> None:
@@ -111,4 +111,35 @@ def test_parse_agy_models_output_formats() -> None:
         "gemini-4-neon-high",
         "claude-sonnet-5-5-high",
     ]
+
+
+def test_scanned_pdf_detection_and_region_crop(tmp_path: Path) -> None:
+    # Render a text page to a raster PNG and embed into a blank PDF (0 text layer)
+    src_doc = fitz.open()
+    sp = src_doc.new_page(width=400, height=200)
+    sp.insert_text((30, 80), "Scanned Raster Page Formula: E = mc^2", fontsize=14)
+    img_bytes = src_doc[0].get_pixmap(matrix=fitz.Matrix(2, 2)).tobytes("png")
+    src_doc.close()
+
+    scanned_pdf = tmp_path / "scanned.pdf"
+    out_doc = fitz.open()
+    page = out_doc.new_page(width=400, height=200)
+    page.insert_image(page.rect, stream=img_bytes)
+    out_doc.save(str(scanned_pdf))
+    out_doc.close()
+
+    parsed = parse_pdf(scanned_pdf, "scanned")
+    assert parsed.is_scanned is True
+    assert parsed.page_count == 1
+    assert parsed.plain_text == ""
+
+    crop_out = tmp_path / "crop.png"
+    crop_pdf_region(
+        scanned_pdf,
+        1,
+        [{"x": 0.05, "y": 0.2, "width": 0.8, "height": 0.4}],
+        crop_out,
+    )
+    assert crop_out.exists()
+    assert crop_out.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
 

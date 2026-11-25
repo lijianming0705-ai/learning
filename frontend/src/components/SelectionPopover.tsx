@@ -1,4 +1,4 @@
-import { Highlighter, Languages, MessageSquarePlus, Sparkles, X } from 'lucide-react';
+import { Highlighter, Languages, MessageSquarePlus, ScanText, Sparkles, X } from 'lucide-react';
 import type { HighlightColor, PendingSelection } from '../types';
 
 export const HIGHLIGHT_COLORS: { id: HighlightColor; label: string; dot: string }[] = [
@@ -13,7 +13,7 @@ interface SelectionPopoverProps {
   selection: PendingSelection;
   selectedColor: HighlightColor;
   onChangeColor: (c: HighlightColor) => void;
-  onAction: (mode: 'highlight' | 'note' | 'ask' | 'translate') => void;
+  onAction: (mode: 'highlight' | 'note' | 'ask' | 'translate' | 'ocr') => void;
   onClose: () => void;
 }
 
@@ -70,6 +70,18 @@ export function SelectionPopover({
         <MessageSquarePlus className="w-3.5 h-3.5 text-emerald-300" />
         <span>记笔记</span>
       </button>
+
+      {selection.anchorType === 'area' && (
+        <button
+          type="button"
+          onClick={() => onAction('ocr')}
+          className="inline-flex items-center gap-1 px-2.5 py-1.5 sm:py-1 rounded-lg hover:bg-white/15 text-xs font-medium cursor-pointer"
+          title="将框选截图发送给 AI 提取文本并保存备注"
+        >
+          <ScanText className="w-3.5 h-3.5 text-cyan-300" />
+          <span>OCR 提取</span>
+        </button>
+      )}
 
       <button
         type="button"
