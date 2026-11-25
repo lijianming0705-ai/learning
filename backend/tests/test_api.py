@@ -23,15 +23,26 @@ def _parse_sse_events(body: str) -> list[tuple[str, dict]]:
 
 
 def test_full_study_workflow_and_rag_persistence(test_client, tmp_path: Path) -> None:
-    # 1. Health & agy models & fastest default setting
+    # 1. Health & agy models & default hydrogen medium setting + user selection persistence
     h_resp = test_client.get("/api/health")
     assert h_resp.status_code == 200
     m_resp = test_client.get("/api/agy/models")
     assert m_resp.status_code == 200
-    assert m_resp.json()[0]["id"] == "gemini-3.8-flash-low"
+    assert m_resp.json()[0]["id"] == "gemini-4-hydrogen-medium"
     s_resp = test_client.get("/api/settings")
     assert s_resp.status_code == 200
-    assert s_resp.json()["default_model"] == "gemini-3.8-flash-low"
+    assert s_resp.json()["default_model"] == "gemini-4-hydrogen-medium"
+
+    # Remember user's last selected model across DB re-init
+    upd_s = test_client.patch("/api/settings", json={"default_model": "gemini-4-neon-high"})
+    assert upd_s.status_code == 200
+    assert upd_s.json()["default_model"] == "gemini-4-neon-high"
+    from app.db import init_study_db
+
+    init_study_db()
+    assert test_client.get("/api/settings").json()["default_model"] == "gemini-4-neon-high"
+    # Restore default for remaining assertions
+    test_client.patch("/api/settings", json={"default_model": "gemini-4-hydrogen-medium"})
 
     # 2. Create notebook
     nb_resp = test_client.post(

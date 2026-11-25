@@ -53,17 +53,26 @@ import type {
 
 type RightTab = 'remarks' | 'chat' | 'speech' | 'rag';
 
+const DEFAULT_AGY_MODEL = 'gemini-4-hydrogen-medium';
+const LAST_MODEL_STORAGE_KEY = 'inkmind.lastSelectedModel';
+
 export default function App() {
   const [health, setHealth] = useState<HealthStatus | null>(null);
   const [models, setModels] = useState<AgyModel[]>([]);
   const [settings, setSettings] = useState<AppSettings>({
-    default_model: 'gemini-3.8-flash-low',
+    default_model: DEFAULT_AGY_MODEL,
     rag_top_k: 5,
     cross_notebook_rag: true,
     embedding_provider: 'hybrid-local',
     ollama_embedding_model: '',
   });
-  const [selectedModel, setSelectedModel] = useState('gemini-3.8-flash-low');
+  const [selectedModel, setSelectedModel] = useState<string>(() => {
+    try {
+      return localStorage.getItem(LAST_MODEL_STORAGE_KEY) || DEFAULT_AGY_MODEL;
+    } catch {
+      return DEFAULT_AGY_MODEL;
+    }
+  });
   const [ragStats, setRagStats] = useState<RagStats | null>(null);
 
   const [notebooks, setNotebooks] = useState<Notebook[]>([]);
@@ -192,7 +201,20 @@ export default function App() {
     }
   };
 
-  const refreshSystem = async () => {
+  const handleSelectModel = (modelId: string) => {
+    const cleanId = modelId.trim();
+    if (!cleanId) return;
+    setSelectedModel(cleanId);
+    setSettings((prev) => ({ ...prev, default_model: cleanId }));
+    try {
+      localStorage.setItem(LAST_MODEL_STORAGE_KEY, cleanId);
+    } catch {
+      // ignore storage errors
+    }
+    api.updateSettings({ default_model: cleanId }).catch(() => {});
+  };
+
+  const refreshSystem = async (syncSelectedModel = false) => {
     const [h, m, s, st] = await Promise.all([
       api.health(),
       api.listModels().catch(() => []),
@@ -202,7 +224,15 @@ export default function App() {
     setHealth(h);
     setModels(m);
     setSettings(s);
-    setSelectedModel(s.default_model);
+    if (syncSelectedModel) {
+      const resolvedModel = s.default_model || DEFAULT_AGY_MODEL;
+      setSelectedModel(resolvedModel);
+      try {
+        localStorage.setItem(LAST_MODEL_STORAGE_KEY, resolvedModel);
+      } catch {
+        // ignore storage errors
+      }
+    }
     setRagStats(st);
   };
 
@@ -213,7 +243,7 @@ export default function App() {
   };
 
   useEffect(() => {
-    refreshSystem().catch(() => {});
+    refreshSystem(true).catch(() => {});
     refreshNotebooks().catch(() => {});
   }, []);
 
@@ -1015,7 +1045,7 @@ export default function App() {
         }}
         models={models}
         selectedModel={selectedModel}
-        onSelectModel={setSelectedModel}
+        onSelectModel={handleSelectModel}
         health={health}
         leftCollapsed={leftCollapsed}
         rightCollapsed={rightCollapsed}
@@ -1380,7 +1410,7 @@ export default function App() {
                       quotedContext={quotedContext}
                       models={models}
                       selectedModel={selectedModel}
-                      onSelectModel={setSelectedModel}
+                      onSelectModel={handleSelectModel}
                       onClearQuotedContext={() => setQuotedContext(null)}
                       onSelectHighlight={(hl) => {
                         setActiveHighlightId(hl.id);
@@ -1408,7 +1438,7 @@ export default function App() {
                       quotedContext={quotedContext}
                       models={models}
                       selectedModel={selectedModel}
-                      onSelectModel={setSelectedModel}
+                      onSelectModel={handleSelectModel}
                       onClearQuotedContext={() => setQuotedContext(null)}
                       onSelectConversation={handleSelectConversation}
                       onNewConversation={() => {
@@ -1436,7 +1466,7 @@ export default function App() {
                       selectionSpeech={selectionSpeech}
                       selectionSpeechLoading={selectionSpeechLoading}
                       selectionPlaying={selectionAudioPlaying}
-                      onSelectModel={setSelectedModel}
+                      onSelectModel={handleSelectModel}
                       onGenerateScript={(force) => {
                         void handleGenerateSpeechScript(Boolean(force));
                       }}
@@ -1597,7 +1627,12 @@ export default function App() {
             const updated = await api.updateSettings(patch);
             setSettings(updated);
             setSelectedModel(updated.default_model);
-            await refreshSystem();
+            try {
+              localStorage.setItem(LAST_MODEL_STORAGE_KEY, updated.default_model);
+            } catch {
+              // ignore storage errors
+            }
+            await refreshSystem(false);
           }}
           onReindexRag={async () => {
             const st = await api.ragReindex();
@@ -1612,7 +1647,7 @@ export default function App() {
           activeNotebook={activeNotebook}
           models={models}
           selectedModel={selectedModel}
-          onSelectModel={setSelectedModel}
+          onSelectModel={handleSelectModel}
           onJumpToSource={async (notebookId, sourceId) => {
             let targetNb = notebooks.find((n) => n.id === notebookId) || null;
             if (!targetNb) {

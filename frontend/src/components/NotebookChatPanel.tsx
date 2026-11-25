@@ -132,7 +132,11 @@ export function NotebookChatPanel({
               ) : (
                 models.map((m) => (
                   <option key={m.id} value={m.id}>
-                    {m.id === 'gemini-3.8-flash-low' ? `⚡ ${m.name} · 最快` : m.name}
+                    {m.id === 'gemini-4-hydrogen-medium'
+                      ? `★ ${m.name} · 默认`
+                      : m.id === 'gemini-3.8-flash-low'
+                        ? `⚡ ${m.name} · 最快`
+                        : m.name}
                   </option>
                 ))
               )}

@@ -103,10 +103,12 @@ def test_parse_agy_models_output_formats() -> None:
         "\r⠋ Fetching available models...\r⠙ Fetching available models..."
         "gemini-4-neon-high\tGemini 4 Neon (High)\n"
         "gemini-3.8-flash-medium        Gemini 3.8 Flash (Medium)\n"
+        "gemini-4-hydrogen-medium\tGemini 4 Hydrogen (Medium)\n"
         "claude-sonnet-5-5-high\tClaude Sonnet 5.5 (High)\n"
     )
     models = parse_agy_models_output(raw)
     assert [m.id for m in models] == [
+        "gemini-4-hydrogen-medium",
         "gemini-3.8-flash-medium",
         "gemini-4-neon-high",
         "claude-sonnet-5-5-high",

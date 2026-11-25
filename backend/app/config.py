@@ -45,6 +45,6 @@ def ensure_data_dirs() -> AppPaths:
 
 
 AGY_BIN = os.environ.get("STUDY_AGY_BIN", "agy")
-DEFAULT_MODEL = os.environ.get("STUDY_DEFAULT_MODEL", "gemini-3.8-flash-low")
+DEFAULT_MODEL = os.environ.get("STUDY_DEFAULT_MODEL", "gemini-4-hydrogen-medium")
 OLLAMA_URL = os.environ.get("STUDY_OLLAMA_URL", "http://localhost:11434")
 MAX_UPLOAD_BYTES = 80 * 1024 * 1024  # 80 MB

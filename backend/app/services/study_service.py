@@ -66,8 +66,9 @@ def get_settings() -> SettingsOut:
 
 def update_settings(payload: SettingsUpdate) -> SettingsOut:
     updates: dict[str, str] = {}
-    if payload.default_model is not None:
-        updates["default_model"] = payload.default_model
+    if payload.default_model is not None and payload.default_model.strip():
+        updates["default_model"] = payload.default_model.strip()
+        updates["default_model_user_selected"] = "true"
     if payload.rag_top_k is not None:
         updates["rag_top_k"] = str(payload.rag_top_k)
     if payload.cross_notebook_rag is not None:

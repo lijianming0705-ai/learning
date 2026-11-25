@@ -9,6 +9,7 @@ from app.config import DEFAULT_MODEL, ensure_data_dirs, get_paths
 
 DEFAULT_SETTINGS: dict[str, str] = {
     "default_model": DEFAULT_MODEL,
+    "default_model_user_selected": "false",
     "rag_top_k": "5",
     "cross_notebook_rag": "true",
     "embedding_provider": "hybrid-local",
@@ -200,6 +201,22 @@ def init_study_db() -> None:
             conn.execute(
                 "INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)",
                 (key, value),
+            )
+        # Upgrade legacy uncustomized default_model from gemini-3.8-flash-low to DEFAULT_MODEL
+        user_sel_row = conn.execute(
+            "SELECT value FROM settings WHERE key = 'default_model_user_selected'"
+        ).fetchone()
+        cur_model_row = conn.execute(
+            "SELECT value FROM settings WHERE key = 'default_model'"
+        ).fetchone()
+        if (
+            (not user_sel_row or user_sel_row["value"] != "true")
+            and cur_model_row
+            and cur_model_row["value"] == "gemini-3.8-flash-low"
+        ):
+            conn.execute(
+                "UPDATE settings SET value = ? WHERE key = 'default_model'",
+                (DEFAULT_MODEL,),
             )
     # Touch path check for clarity
     _ = get_paths()
