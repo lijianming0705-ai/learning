@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Database, Loader2, MessageSquarePlus, Send, Trash2 } from 'lucide-react';
-import type { ChatMessage, ConversationSummary, RagMemoryRef } from '../types';
+import { Database, Loader2, MessageSquarePlus, Send, Sparkles, Trash2 } from 'lucide-react';
+import type { AgyModel, ChatMessage, ConversationSummary, RagMemoryRef } from '../types';
 
 interface NotebookChatPanelProps {
   conversations: ConversationSummary[];
@@ -12,6 +12,9 @@ interface NotebookChatPanelProps {
   streamingStatus: string;
   streamingActive: boolean;
   quotedContext: string | null;
+  models: AgyModel[];
+  selectedModel: string;
+  onSelectModel: (modelId: string) => void;
   onClearQuotedContext: () => void;
   onSelectConversation: (convId: string) => void;
   onNewConversation: () => void;
@@ -28,6 +31,9 @@ export function NotebookChatPanel({
   streamingStatus,
   streamingActive,
   quotedContext,
+  models,
+  selectedModel,
+  onSelectModel,
   onClearQuotedContext,
   onSelectConversation,
   onNewConversation,
@@ -89,27 +95,49 @@ export function NotebookChatPanel({
           )}
         </div>
 
-        <div className="flex items-center gap-3 text-[11px] text-[#5E5B53]">
-          <label className="inline-flex items-center gap-1 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={useRag}
-              onChange={(e) => setUseRag(e.target.checked)}
-              className="accent-[#B45309]"
-            />
-            <span>自动调取 RAG 历史记忆</span>
-          </label>
-          {useRag && (
+        <div className="flex items-center justify-between gap-2 text-[11px] text-[#5E5B53]">
+          <div className="flex items-center gap-3">
             <label className="inline-flex items-center gap-1 cursor-pointer">
               <input
                 type="checkbox"
-                checked={crossNotebook}
-                onChange={(e) => setCrossNotebook(e.target.checked)}
+                checked={useRag}
+                onChange={(e) => setUseRag(e.target.checked)}
                 className="accent-[#B45309]"
               />
-              <span>跨笔记本记忆</span>
+              <span>RAG 记忆</span>
             </label>
-          )}
+            {useRag && (
+              <label className="inline-flex items-center gap-1 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={crossNotebook}
+                  onChange={(e) => setCrossNotebook(e.target.checked)}
+                  className="accent-[#B45309]"
+                />
+                <span>跨本</span>
+              </label>
+            )}
+          </div>
+
+          <div className="flex items-center gap-1 min-w-0 max-w-[55%]">
+            <Sparkles className="w-3 h-3 text-[#B45309] shrink-0" />
+            <select
+              value={selectedModel}
+              onChange={(e) => onSelectModel(e.target.value)}
+              aria-label="笔记本对话 agy 模型"
+              className="w-full min-w-0 rounded-md border border-[#E5E0D5] bg-white px-1.5 py-0.5 text-[11px] font-medium text-[#1C1B18] focus:outline-none focus:border-[#B45309] cursor-pointer"
+            >
+              {models.length === 0 ? (
+                <option value={selectedModel}>{selectedModel}</option>
+              ) : (
+                models.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.id === 'gemini-3.8-flash-low' ? `⚡ ${m.name} · 最快` : m.name}
+                  </option>
+                ))
+              )}
+            </select>
+          </div>
         </div>
 
         {quotedContext && (

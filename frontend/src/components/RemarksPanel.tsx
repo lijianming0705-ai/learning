@@ -13,7 +13,7 @@ import {
   Sparkles,
   Trash2,
 } from 'lucide-react';
-import type { Highlight, HighlightColor, RagMemoryRef } from '../types';
+import type { AgyModel, Highlight, HighlightColor, RagMemoryRef } from '../types';
 import { HIGHLIGHT_COLORS } from './SelectionPopover';
 
 const QUICK_PROMPTS = ['通俗解释', '提炼核心要点', '举个实际例子', '结合历史笔记对比'];
@@ -24,6 +24,9 @@ interface RemarksPanelProps {
   focusIntent: { highlightId: string; mode: 'note' | 'ask' } | null;
   streamingMap: Record<string, { text: string; status: string; memories: RagMemoryRef[] }>;
   quotedContext: string | null;
+  models: AgyModel[];
+  selectedModel: string;
+  onSelectModel: (modelId: string) => void;
   onClearQuotedContext: () => void;
   onSelectHighlight: (hl: Highlight) => void;
   onUpdateHighlight: (id: string, patch: { color?: HighlightColor; note_text?: string }) => Promise<void>;
@@ -38,6 +41,9 @@ export function RemarksPanel({
   focusIntent,
   streamingMap,
   quotedContext,
+  models,
+  selectedModel,
+  onSelectModel,
   onClearQuotedContext,
   onSelectHighlight,
   onUpdateHighlight,
@@ -149,7 +155,7 @@ export function RemarksPanel({
           </div>
         </div>
 
-        <div className="flex items-center justify-between text-[11px] text-[#5E5B53]">
+        <div className="flex items-center justify-between gap-2 text-[11px] text-[#5E5B53]">
           <div className="flex items-center gap-3">
             <label className="inline-flex items-center gap-1 cursor-pointer">
               <input
@@ -173,6 +179,29 @@ export function RemarksPanel({
             )}
           </div>
           <span>共 {filtered.length} 条备注</span>
+        </div>
+
+        <div className="flex items-center justify-between gap-2 text-[11px]">
+          <span className="inline-flex items-center gap-1 text-[#5E5B53] shrink-0">
+            <Sparkles className="w-3 h-3 text-[#B45309]" />
+            <span>提问模型</span>
+          </span>
+          <select
+            value={selectedModel}
+            onChange={(e) => onSelectModel(e.target.value)}
+            aria-label="划线提问 agy 模型"
+            className="flex-1 min-w-0 rounded-lg border border-[#E5E0D5] bg-white px-2 py-1 text-[11px] font-medium text-[#1C1B18] focus:outline-none focus:border-[#B45309] cursor-pointer"
+          >
+            {models.length === 0 ? (
+              <option value={selectedModel}>{selectedModel}</option>
+            ) : (
+              models.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.id === 'gemini-3.8-flash-low' ? `⚡ ${m.name} · 最快` : m.name}
+                </option>
+              ))
+            )}
+          </select>
         </div>
 
         {quotedContext && (

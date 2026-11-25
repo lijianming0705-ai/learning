@@ -21,6 +21,28 @@ def strip_ansi(text: str) -> str:
     return _ANSI_ESCAPE_RE.sub("", text)
 
 
+def sort_models_fastest_first(models: list[AgyModelOut]) -> list[AgyModelOut]:
+    """Order models with the fastest Flash-Low model first, preserving CLI order otherwise."""
+
+    def priority(m: AgyModelOut) -> tuple[int, str]:
+        mid = m.id.lower()
+        if mid == "gemini-3.8-flash-low":
+            return (0, mid)
+        if "flash" in mid and mid.endswith("-low"):
+            return (1, mid)
+        if "flash" in mid and mid.endswith("-medium"):
+            return (2, mid)
+        if "flash" in mid:
+            return (3, mid)
+        if mid.endswith("-low"):
+            return (4, mid)
+        return (5, mid)
+
+    indexed = list(enumerate(models))
+    indexed.sort(key=lambda item: (priority(item[1])[0], item[0]))
+    return [m for _, m in indexed]
+
+
 def parse_agy_models_output(raw: str) -> list[AgyModelOut]:
     cleaned = strip_ansi(raw).replace("\r", "\n")
     models: list[AgyModelOut] = []
@@ -35,7 +57,7 @@ def parse_agy_models_output(raw: str) -> list[AgyModelOut]:
             if model_id not in seen:
                 seen.add(model_id)
                 models.append(AgyModelOut(id=model_id, name=name))
-    return models
+    return sort_models_fastest_first(models)
 
 
 @dataclass
@@ -200,7 +222,7 @@ class AgyService:
             return self._models_cache
 
         if not self.is_available():
-            return [AgyModelOut(id=DEFAULT_MODEL, name="Gemini 3.8 Flash (Medium)")]
+            return [AgyModelOut(id=DEFAULT_MODEL, name="Gemini 3.8 Flash (Low)")]
 
         proc = await asyncio.create_subprocess_exec(
             AGY_BIN,
@@ -220,9 +242,9 @@ class AgyService:
                 proc.kill()
 
         return self._models_cache or [
-            AgyModelOut(id="gemini-4-neon-high", name="Gemini 4 Neon (High)"),
-            AgyModelOut(id="gemini-3.8-flash-medium", name="Gemini 3.8 Flash (Medium)"),
             AgyModelOut(id="gemini-3.8-flash-low", name="Gemini 3.8 Flash (Low)"),
+            AgyModelOut(id="gemini-3.8-flash-medium", name="Gemini 3.8 Flash (Medium)"),
+            AgyModelOut(id="gemini-4-neon-high", name="Gemini 4 Neon (High)"),
         ]
 
     async def prewarm_standby(self, model: str = DEFAULT_MODEL) -> None:

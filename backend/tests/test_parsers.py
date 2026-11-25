@@ -107,8 +107,8 @@ def test_parse_agy_models_output_formats() -> None:
     )
     models = parse_agy_models_output(raw)
     assert [m.id for m in models] == [
-        "gemini-4-neon-high",
         "gemini-3.8-flash-medium",
+        "gemini-4-neon-high",
         "claude-sonnet-5-5-high",
     ]
 

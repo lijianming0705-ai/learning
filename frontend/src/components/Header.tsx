@@ -63,7 +63,7 @@ export function Header({
           </span>
         </button>
 
-        <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-[#E5E0D5] bg-[#FAF8F4]">
+        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-[#E5E0D5] bg-[#FAF8F4]">
           <span
             className={`w-2 h-2 rounded-full ${health?.agy_available ? 'bg-emerald-500' : 'bg-rose-500'}`}
             title={health?.agy_available ? `agy CLI 已连接 (${health.agy_path})` : '未检测到 agy CLI'}
@@ -80,7 +80,7 @@ export function Header({
             ) : (
               models.map((m) => (
                 <option key={m.id} value={m.id}>
-                  {m.name}
+                  {m.id === 'gemini-3.8-flash-low' ? `⚡ ${m.name} · 最快` : m.name}
                 </option>
               ))
             )}

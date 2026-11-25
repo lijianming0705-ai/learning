@@ -33,13 +33,13 @@ export default function App() {
   const [health, setHealth] = useState<HealthStatus | null>(null);
   const [models, setModels] = useState<AgyModel[]>([]);
   const [settings, setSettings] = useState<AppSettings>({
-    default_model: 'gemini-3.8-flash-medium',
+    default_model: 'gemini-3.8-flash-low',
     rag_top_k: 5,
     cross_notebook_rag: true,
     embedding_provider: 'hybrid-local',
     ollama_embedding_model: '',
   });
-  const [selectedModel, setSelectedModel] = useState('gemini-3.8-flash-medium');
+  const [selectedModel, setSelectedModel] = useState('gemini-3.8-flash-low');
   const [ragStats, setRagStats] = useState<RagStats | null>(null);
 
   const [notebooks, setNotebooks] = useState<Notebook[]>([]);
@@ -560,6 +560,9 @@ export default function App() {
                   focusIntent={focusIntent}
                   streamingMap={highlightStreams}
                   quotedContext={quotedContext}
+                  models={models}
+                  selectedModel={selectedModel}
+                  onSelectModel={setSelectedModel}
                   onClearQuotedContext={() => setQuotedContext(null)}
                   onSelectHighlight={(hl) => {
                     setActiveHighlightId(hl.id);
@@ -583,6 +586,9 @@ export default function App() {
                   streamingStatus={chatStreamingStatus}
                   streamingActive={chatStreaming}
                   quotedContext={quotedContext}
+                  models={models}
+                  selectedModel={selectedModel}
+                  onSelectModel={setSelectedModel}
                   onClearQuotedContext={() => setQuotedContext(null)}
                   onSelectConversation={handleSelectConversation}
                   onNewConversation={() => {

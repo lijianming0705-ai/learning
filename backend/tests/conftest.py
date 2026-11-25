@@ -21,6 +21,7 @@ def test_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 
     async def fake_list_models(force_refresh: bool = False):
         return [
+            AgyModelOut(id="gemini-3.8-flash-low", name="Gemini 3.8 Flash (Low)"),
             AgyModelOut(id="gemini-3.8-flash-medium", name="Gemini 3.8 Flash (Medium)"),
             AgyModelOut(id="gemini-4-neon-high", name="Gemini 4 Neon (High)"),
         ]
