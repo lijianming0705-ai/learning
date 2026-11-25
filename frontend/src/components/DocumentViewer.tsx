@@ -223,17 +223,17 @@ export function DocumentViewer({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [einkMode, turnScreen]);
 
-  const containerWidthClass = fullWidthReading
-    ? 'max-w-5xl'
+  const cardPaddingClass = fullWidthReading
+    ? 'px-4 sm:px-10'
     : expandedReading
-      ? 'max-w-4xl'
-      : 'max-w-3xl';
+      ? 'px-4 sm:px-9'
+      : 'px-4 sm:px-7';
 
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-[#F8F6F1]">
-      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-3 sm:px-6 py-4 sm:py-6">
+      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-2.5 sm:px-4 py-3 sm:py-5">
         <div
-          className={`${containerWidthClass} mx-auto bg-white border border-[#E5E0D5] rounded-2xl shadow-xs px-4 sm:px-8 py-5 sm:py-7 transition-all duration-200 eink-surface`}
+          className={`w-full mx-auto bg-white border border-[#E5E0D5] rounded-2xl shadow-xs ${cardPaddingClass} py-5 sm:py-7 eink-surface`}
         >
           <div className="pb-4 mb-5 border-b border-[#EFECE5] flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">

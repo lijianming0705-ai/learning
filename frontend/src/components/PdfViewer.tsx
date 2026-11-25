@@ -422,19 +422,29 @@ export function PdfViewer({
   const [currentPage, setCurrentPage] = useState(1);
   const [areaMode, setAreaMode] = useState(false);
   const [paginatedMode, setPaginatedMode] = useState(einkMode);
+  const [fitWidthMode, setFitWidthMode] = useState(true);
 
   const pageRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const displayScaleRef = useRef(displayScale);
   displayScaleRef.current = displayScale;
   const swipeStartRef = useRef<{ x: number; y: number } | null>(null);
+  const lastObservedWidthRef = useRef<number>(0);
 
   useEffect(() => {
     setPaginatedMode(einkMode);
   }, [einkMode]);
 
-  const setZoomImmediate = (next: number) => {
+  const computeFitWidthScale = useCallback((pageWidth: number): number | null => {
+    const container = scrollContainerRef.current;
+    if (!container || !pageWidth) return null;
+    const avail = Math.max(280, container.clientWidth - 36);
+    return Math.max(0.6, Math.min(3.0, Number((avail / pageWidth).toFixed(2))));
+  }, []);
+
+  const setZoomImmediate = (next: number, keepFitWidth = false) => {
     const clamped = Math.max(0.6, Math.min(3.0, Number(next.toFixed(2))));
+    if (!keepFitWidth) setFitWidthMode(false);
     setDisplayScale(clamped);
     setRenderScale(clamped);
   };
@@ -445,6 +455,7 @@ export function PdfViewer({
     maxScale: 3.0,
     currentScale: displayScale,
     onScaleChange: (next) => {
+      setFitWidthMode(false);
       const container = scrollContainerRef.current;
       const prev = displayScaleRef.current;
       if (container && prev > 0) {
@@ -466,6 +477,8 @@ export function PdfViewer({
     setLoading(true);
     setErrorMsg(null);
     setCurrentPage(1);
+    setFitWidthMode(true);
+    lastObservedWidthRef.current = 0;
 
     const task = pdfjsLib.getDocument(`/api/sources/${source.id}/file`);
     task.promise
@@ -480,10 +493,11 @@ export function PdfViewer({
           if (!cancelled) {
             const pageW = p1.getViewport({ scale: 1 }).width;
             setBasePageWidth(pageW);
-            // Auto-fit narrow screens / tablets on first load
-            if (scrollContainerRef.current && window.innerWidth < 1024) {
-              const avail = Math.max(280, scrollContainerRef.current.clientWidth - 24);
-              const fitted = Math.max(0.6, Math.min(1.8, Number((avail / pageW).toFixed(2))));
+            const fitted = computeFitWidthScale(pageW);
+            if (fitted !== null) {
+              if (scrollContainerRef.current) {
+                lastObservedWidthRef.current = scrollContainerRef.current.clientWidth;
+              }
               setDisplayScale(fitted);
               setRenderScale(fitted);
             }
@@ -505,7 +519,33 @@ export function PdfViewer({
       task.destroy();
       loadedDoc?.destroy();
     };
-  }, [source.id]);
+  }, [source.id, computeFitWidthScale]);
+
+  // Keep PDF fitted to width when sidebars collapse/expand or viewport resizes
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container || !fitWidthMode || !basePageWidth) return;
+
+    let timer: number | null = null;
+    const ro = new ResizeObserver(() => {
+      const cw = container.clientWidth;
+      if (Math.abs(cw - lastObservedWidthRef.current) < 8) return;
+      if (timer !== null) window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        lastObservedWidthRef.current = container.clientWidth;
+        const fitted = computeFitWidthScale(basePageWidth);
+        if (fitted !== null) {
+          setDisplayScale(fitted);
+          setRenderScale(fitted);
+        }
+      }, 120);
+    });
+    ro.observe(container);
+    return () => {
+      ro.disconnect();
+      if (timer !== null) window.clearTimeout(timer);
+    };
+  }, [fitWidthMode, basePageWidth, computeFitWidthScale]);
 
   const numPages = pdfDoc?.numPages || source.page_count || 1;
 
@@ -548,10 +588,15 @@ export function PdfViewer({
   }, [paginatedMode, currentPage, goToPage]);
 
   const handleFitWidth = () => {
-    if (!scrollContainerRef.current || !basePageWidth) return;
-    const avail = Math.max(280, scrollContainerRef.current.clientWidth - 32);
-    const next = Math.max(0.6, Math.min(3.0, Number((avail / basePageWidth).toFixed(2))));
-    setZoomImmediate(next);
+    if (!basePageWidth) return;
+    setFitWidthMode(true);
+    const fitted = computeFitWidthScale(basePageWidth);
+    if (fitted !== null) {
+      if (scrollContainerRef.current) {
+        lastObservedWidthRef.current = scrollContainerRef.current.clientWidth;
+      }
+      setZoomImmediate(fitted, true);
+    }
   };
 
   const previewScaleRatio = renderScale > 0 ? displayScale / renderScale : 1;
@@ -674,7 +719,11 @@ export function PdfViewer({
               type="button"
               onClick={handleFitWidth}
               disabled={!basePageWidth}
-              className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-[#E5E0D5] bg-[#FAF8F4] hover:bg-[#EFECE5] text-[11px] font-medium text-[#1C1B18] cursor-pointer disabled:opacity-40 ml-0.5"
+              className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg border text-[11px] font-medium cursor-pointer disabled:opacity-40 ml-0.5 ${
+                fitWidthMode
+                  ? 'border-[#B45309] bg-amber-50 text-[#B45309]'
+                  : 'border-[#E5E0D5] bg-[#FAF8F4] hover:bg-[#EFECE5] text-[#1C1B18]'
+              }`}
               title="自适应当前阅读区宽度"
             >
               <MoveHorizontal className="w-3 h-3 text-[#B45309]" />
