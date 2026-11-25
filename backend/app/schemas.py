@@ -48,6 +48,7 @@ class SourceSummary(BaseModel):
     notebook_id: str
     type: Literal["pdf", "docx", "url", "text"]
     title: str
+    category: str = ""
     original_filename: str | None = None
     source_url: str | None = None
     page_count: int = 0
@@ -57,6 +58,21 @@ class SourceSummary(BaseModel):
     error_message: str | None = None
     created_at: str
     updated_at: str
+
+
+class SourceUpdate(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=300)
+    category: str | None = Field(default=None, max_length=60)
+
+
+class ClassifySourcesRequest(BaseModel):
+    model: str | None = None
+
+
+class ClassifySourcesResponse(BaseModel):
+    classified_count: int
+    categories: list[str]
+    sources: list[SourceSummary]
 
 
 class SourcePageOut(BaseModel):

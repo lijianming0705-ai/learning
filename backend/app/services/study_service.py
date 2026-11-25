@@ -26,6 +26,7 @@ from app.schemas import (
     SourceDetail,
     SourcePageOut,
     SourceSummary,
+    SourceUpdate,
 )
 from app.services.source_parser import ParsedSource, chunk_text
 
@@ -308,6 +309,62 @@ def save_parsed_source(
     return get_source_detail(source_id)  # type: ignore[return-value]
 
 
+def update_source(source_id: str, payload: SourceUpdate) -> SourceDetail | None:
+    existing = get_source_detail(source_id)
+    if not existing:
+        return None
+    new_title = payload.title.strip() if payload.title is not None else existing.title
+    new_category = payload.category.strip() if payload.category is not None else existing.category
+    now = utc_now_iso()
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE sources SET title = ?, category = ?, updated_at = ? WHERE id = ?",
+            (new_title, new_category, now, source_id),
+        )
+        conn.execute("UPDATE notebooks SET updated_at = ? WHERE id = ?", (now, existing.notebook_id))
+    if payload.title is not None and new_title != existing.title:
+        rag_store.update_source_title(source_id, new_title)
+    return get_source_detail(source_id)
+
+
+def list_sources_for_classification(notebook_id: str) -> list[dict[str, str]]:
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT id, title, type, category, plain_text FROM sources WHERE notebook_id = ? ORDER BY created_at DESC",
+            (notebook_id,),
+        ).fetchall()
+    return [
+        {
+            "id": r["id"],
+            "title": r["title"],
+            "type": r["type"],
+            "category": r["category"] or "",
+            "excerpt": " ".join((r["plain_text"] or "").split())[:400],
+        }
+        for r in rows
+    ]
+
+
+def bulk_update_source_categories(notebook_id: str, mapping: dict[str, str]) -> int:
+    if not mapping:
+        return 0
+    now = utc_now_iso()
+    updated = 0
+    with get_db() as conn:
+        for sid, cat in mapping.items():
+            clean_cat = cat.strip()[:60]
+            if not clean_cat:
+                continue
+            cur = conn.execute(
+                "UPDATE sources SET category = ?, updated_at = ? WHERE id = ? AND notebook_id = ?",
+                (clean_cat, now, sid, notebook_id),
+            )
+            updated += cur.rowcount
+        if updated:
+            conn.execute("UPDATE notebooks SET updated_at = ? WHERE id = ?", (now, notebook_id))
+    return updated
+
+
 def delete_source(source_id: str) -> bool:
     with get_db() as conn:
         row = conn.execute("SELECT file_path, notebook_id FROM sources WHERE id = ?", (source_id,)).fetchone()
@@ -328,6 +385,7 @@ def _row_to_source_summary(row: sqlite3.Row) -> SourceSummary:
         notebook_id=row["notebook_id"],
         type=row["type"],
         title=row["title"],
+        category=row["category"] if "category" in row.keys() and row["category"] else "",
         original_filename=row["original_filename"],
         source_url=row["source_url"],
         page_count=int(row["page_count"]),

@@ -7,8 +7,16 @@ from fastapi import APIRouter, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
 from app.config import MAX_UPLOAD_BYTES, ensure_data_dirs
-from app.schemas import SourceDetail, SourceSummary, UrlImportRequest
+from app.schemas import (
+    ClassifySourcesRequest,
+    ClassifySourcesResponse,
+    SourceDetail,
+    SourceSummary,
+    SourceUpdate,
+    UrlImportRequest,
+)
 from app.services import study_service
+from app.services.agy_service import classify_sources_with_agy
 from app.services.source_parser import fetch_and_parse_url, parse_docx, parse_pdf, parse_text_file
 
 router = APIRouter(prefix="/api", tags=["sources"])
@@ -114,6 +122,48 @@ async def get_source_file(source_id: str) -> FileResponse:
         path=file_path,
         media_type=media_type or "application/octet-stream",
         filename=filename,
+    )
+
+
+@router.patch("/sources/{source_id}", response_model=SourceDetail)
+async def patch_source(source_id: str, payload: SourceUpdate) -> SourceDetail:
+    src = study_service.update_source(source_id, payload)
+    if not src:
+        raise HTTPException(status_code=404, detail="Source not found")
+    return src
+
+
+@router.post("/notebooks/{notebook_id}/sources/classify", response_model=ClassifySourcesResponse)
+async def classify_notebook_sources(
+    notebook_id: str,
+    payload: ClassifySourcesRequest | None = None,
+) -> ClassifySourcesResponse:
+    nb = study_service.get_notebook(notebook_id)
+    if not nb:
+        raise HTTPException(status_code=404, detail="Notebook not found")
+    items = study_service.list_sources_for_classification(notebook_id)
+    if not items:
+        return ClassifySourcesResponse(classified_count=0, categories=[], sources=[])
+
+    settings = study_service.get_settings()
+    model = ((payload.model if payload else None) or settings.default_model).strip()
+    try:
+        mapping = await classify_sources_with_agy(
+            notebook_id=notebook_id,
+            notebook_title=nb.title,
+            sources=items,
+            model=model,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"AI 分类失败: {exc}") from exc
+
+    classified_count = study_service.bulk_update_source_categories(notebook_id, mapping)
+    updated_sources = study_service.list_sources(notebook_id)
+    categories = sorted({s.category for s in updated_sources if s.category})
+    return ClassifySourcesResponse(
+        classified_count=classified_count,
+        categories=categories,
+        sources=updated_sources,
     )
 
 

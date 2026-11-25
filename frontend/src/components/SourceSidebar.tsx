@@ -1,5 +1,23 @@
-import { useRef, useState } from 'react';
-import { FileText, FileUp, Globe, Link2, Loader2, PanelLeftClose, Trash2, UploadCloud } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Check,
+  ChevronDown,
+  ChevronRight,
+  FileText,
+  FileUp,
+  Folder,
+  FolderOpen,
+  Globe,
+  Link2,
+  List,
+  Loader2,
+  PanelLeftClose,
+  Pencil,
+  Sparkles,
+  Trash2,
+  UploadCloud,
+  X,
+} from 'lucide-react';
 import type { SourceSummary } from '../types';
 
 interface SourceSidebarProps {
@@ -9,6 +27,8 @@ interface SourceSidebarProps {
   onSelectSource: (sourceId: string) => void;
   onUploadFiles: (files: File[]) => Promise<void>;
   onImportUrl: (url: string) => Promise<void>;
+  onUpdateSource: (sourceId: string, patch: { title?: string; category?: string }) => Promise<void>;
+  onClassifySources: () => Promise<void>;
   onDeleteSource: (sourceId: string) => Promise<void>;
   onCollapse?: () => void;
 }
@@ -20,6 +40,8 @@ export function SourceSidebar({
   onSelectSource,
   onUploadFiles,
   onImportUrl,
+  onUpdateSource,
+  onClassifySources,
   onDeleteSource,
   onCollapse,
 }: SourceSidebarProps) {
@@ -28,7 +50,37 @@ export function SourceSidebar({
   const [uploading, setUploading] = useState(false);
   const [urlInput, setUrlInput] = useState('');
   const [importingUrl, setImportingUrl] = useState(false);
+  const [classifying, setClassifying] = useState(false);
+  const [groupByCategory, setGroupByCategory] = useState(false);
+  const [collapsedCategories, setCollapsedCategories] = useState<Record<string, boolean>>({});
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [titleDraft, setTitleDraft] = useState('');
+  const [categoryDraft, setCategoryDraft] = useState('');
+  const [savingEdit, setSavingEdit] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const hasAnyCategory = useMemo(() => sources.some((s) => Boolean(s.category?.trim())), [sources]);
+
+  useEffect(() => {
+    if (hasAnyCategory) {
+      setGroupByCategory(true);
+    }
+  }, [hasAnyCategory]);
+
+  const groupedSources = useMemo(() => {
+    const groups = new Map<string, SourceSummary[]>();
+    for (const src of sources) {
+      const cat = src.category?.trim() || '未分类';
+      const list = groups.get(cat) || [];
+      list.push(src);
+      groups.set(cat, list);
+    }
+    return Array.from(groups.entries()).sort(([a], [b]) => {
+      if (a === '未分类') return 1;
+      if (b === '未分类') return -1;
+      return a.localeCompare(b, 'zh-CN');
+    });
+  }, [sources]);
 
   const handleFiles = async (fileList: FileList | null) => {
     if (!fileList || fileList.length === 0) return;
@@ -60,6 +112,51 @@ export function SourceSidebar({
     }
   };
 
+  const handleClassify = async () => {
+    if (sources.length === 0 || classifying) return;
+    setErrorMsg(null);
+    setClassifying(true);
+    try {
+      await onClassifySources();
+      setGroupByCategory(true);
+      setCollapsedCategories({});
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'AI 分类失败');
+    } finally {
+      setClassifying(false);
+    }
+  };
+
+  const startEditing = (src: SourceSummary) => {
+    setEditingId(src.id);
+    setTitleDraft(src.title);
+    setCategoryDraft(src.category || '');
+  };
+
+  const cancelEditing = () => {
+    setEditingId(null);
+    setTitleDraft('');
+    setCategoryDraft('');
+  };
+
+  const saveEditing = async (sourceId: string) => {
+    const cleanTitle = titleDraft.trim();
+    if (!cleanTitle || savingEdit) return;
+    setSavingEdit(true);
+    setErrorMsg(null);
+    try {
+      await onUpdateSource(sourceId, {
+        title: cleanTitle,
+        category: categoryDraft.trim(),
+      });
+      cancelEditing();
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : '重命名失败');
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
   const badgeForType = (type: SourceSummary['type']) => {
     switch (type) {
       case 'pdf':
@@ -71,6 +168,164 @@ export function SourceSidebar({
       default:
         return { label: 'TXT', cls: 'bg-stone-100 text-stone-700 border-stone-200' };
     }
+  };
+
+  const renderSourceItem = (src: SourceSummary, idxInSection: number) => {
+    const active = src.id === activeSourceId;
+    const badge = badgeForType(src.type);
+    const isEditing = editingId === src.id;
+
+    if (isEditing) {
+      return (
+        <div
+          key={src.id}
+          onClick={(e) => e.stopPropagation()}
+          className="rounded-xl p-2.5 bg-white border border-[#B45309] space-y-2 shadow-xs"
+        >
+          <input
+            type="text"
+            autoFocus
+            value={titleDraft}
+            onChange={(e) => setTitleDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                void saveEditing(src.id);
+              } else if (e.key === 'Escape') {
+                cancelEditing();
+              }
+            }}
+            placeholder="输入素材标题..."
+            className="w-full rounded-lg border border-[#E5E0D5] bg-[#FAF8F4] px-2 py-1 text-xs text-[#1C1B18] focus:outline-none focus:border-[#B45309]"
+          />
+          <input
+            type="text"
+            value={categoryDraft}
+            onChange={(e) => setCategoryDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                void saveEditing(src.id);
+              } else if (e.key === 'Escape') {
+                cancelEditing();
+              }
+            }}
+            placeholder="分类标签（可选）"
+            className="w-full rounded-lg border border-[#E5E0D5] bg-[#FAF8F4] px-2 py-1 text-[11px] text-[#5E5B53] focus:outline-none focus:border-[#B45309]"
+          />
+          <div className="flex items-center justify-end gap-1.5">
+            <button
+              type="button"
+              onClick={cancelEditing}
+              className="inline-flex items-center gap-0.5 px-2 py-1 rounded-md text-[11px] text-[#5E5B53] hover:bg-[#EFECE5] cursor-pointer"
+            >
+              <X className="w-3 h-3" />
+              <span>取消</span>
+            </button>
+            <button
+              type="button"
+              disabled={savingEdit || !titleDraft.trim()}
+              onClick={() => void saveEditing(src.id)}
+              className="inline-flex items-center gap-0.5 px-2 py-1 rounded-md text-[11px] font-medium bg-[#B45309] text-white hover:bg-[#92400E] disabled:opacity-50 cursor-pointer"
+            >
+              <Check className="w-3 h-3" />
+              <span>保存</span>
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div
+        key={src.id}
+        onClick={() => onSelectSource(src.id)}
+        className={`group relative rounded-xl p-2.5 cursor-pointer transition border ${
+          active
+            ? 'bg-white border-[#B45309]/70 shadow-xs'
+            : 'border-transparent hover:bg-white/80 hover:border-[#E5E0D5]'
+        }`}
+      >
+        <div className="flex items-start justify-between gap-1.5">
+          <div className="flex items-center gap-1.5 min-w-0">
+            {src.type === 'url' ? (
+              <Globe className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+            ) : (
+              <FileText className="w-3.5 h-3.5 text-[#5E5B53] shrink-0" />
+            )}
+            <span
+              title={src.title}
+              onDoubleClick={(e) => {
+                e.stopPropagation();
+                startEditing(src);
+              }}
+              className="text-xs font-medium text-[#1C1B18] truncate"
+            >
+              {src.title}
+            </span>
+          </div>
+          <div className="flex items-center gap-0.5 shrink-0">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                startEditing(src);
+              }}
+              className="opacity-100 md:opacity-0 md:group-hover:opacity-100 p-1 rounded text-[#5E5B53] hover:text-[#B45309] cursor-pointer"
+              title="重命名素材"
+            >
+              <Pencil className="w-3 h-3" />
+            </button>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (window.confirm(`删除素材《${src.title}》？其划线和对话也将移除。`)) {
+                  onDeleteSource(src.id);
+                }
+              }}
+              className="opacity-100 md:opacity-0 md:group-hover:opacity-100 p-1 rounded text-[#5E5B53] hover:text-rose-600 cursor-pointer"
+              title="删除素材"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+
+        {/* Hover full-title tooltip when title is truncated */}
+        <div
+          className={`hidden md:group-hover:block absolute left-2 right-2 ${
+            idxInSection === 0 ? 'top-full mt-1' : 'bottom-full mb-1'
+          } z-30 pointer-events-none rounded-lg bg-[#1C1B18] text-white px-2.5 py-1.5 text-[11px] leading-snug shadow-lg break-words`}
+        >
+          <div className="font-medium">{src.title}</div>
+          {(src.category || (src.original_filename && src.original_filename !== src.title)) && (
+            <div className="text-[10px] text-white/75 mt-0.5 break-all">
+              {src.category ? `分类：${src.category}` : ''}
+              {src.category && src.original_filename && src.original_filename !== src.title ? ' · ' : ''}
+              {src.original_filename && src.original_filename !== src.title ? src.original_filename : ''}
+            </div>
+          )}
+        </div>
+
+        <div className="mt-1.5 flex items-center justify-between text-[11px] text-[#5E5B53] gap-1">
+          <div className="flex items-center gap-1 min-w-0">
+            <span className={`px-1.5 py-0.2 rounded border text-[10px] font-medium shrink-0 ${badge.cls}`}>
+              {badge.label}
+            </span>
+            {!groupByCategory && src.category && (
+              <span className="px-1.5 py-0.2 rounded bg-[#EFECE5] text-[#4A473F] text-[10px] truncate max-w-[84px]">
+                {src.category}
+              </span>
+            )}
+          </div>
+          <span className="shrink-0">
+            {src.type === 'pdf' ? `${src.page_count} 页` : `${src.word_count} 字`}
+            {src.highlight_count > 0 ? ` · ${src.highlight_count} 划线` : ''}
+          </span>
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -91,6 +346,35 @@ export function SourceSidebar({
               </button>
             )}
           </div>
+        </div>
+
+        {/* AI One-Click Classify + View Toggle */}
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            disabled={sources.length === 0 || classifying}
+            onClick={handleClassify}
+            className="flex-1 inline-flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-lg bg-[#B45309] hover:bg-[#92400E] text-white text-[11px] font-medium disabled:opacity-45 cursor-pointer transition"
+            title="使用 agy AI 自动识别素材主题并归类"
+          >
+            {classifying ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+            <span>{classifying ? 'AI 分类中...' : 'AI 一键分类'}</span>
+          </button>
+
+          <button
+            type="button"
+            disabled={sources.length === 0}
+            onClick={() => setGroupByCategory((v) => !v)}
+            title={groupByCategory ? '当前按分类分组，点击切换平铺列表' : '点击按分类折叠浏览'}
+            className={`inline-flex items-center gap-1 px-2 py-1.5 rounded-lg border text-[11px] font-medium cursor-pointer disabled:opacity-45 ${
+              groupByCategory
+                ? 'border-[#B45309] bg-amber-50 text-[#B45309]'
+                : 'border-[#E5E0D5] bg-white text-[#5E5B53] hover:text-[#1C1B18]'
+            }`}
+          >
+            {groupByCategory ? <FolderOpen className="w-3 h-3" /> : <List className="w-3 h-3" />}
+            <span>{groupByCategory ? '分组' : '列表'}</span>
+          </button>
         </div>
 
         {/* Drag and Drop Upload Zone */}
@@ -162,62 +446,52 @@ export function SourceSidebar({
         )}
       </div>
 
-      {/* Sources List */}
-      <div className="flex-1 overflow-y-auto p-2 space-y-1">
+      {/* Sources List / Grouped Categories */}
+      <div className="flex-1 overflow-y-auto p-2 space-y-1.5">
         {sources.length === 0 ? (
           <div className="text-center py-10 px-3 text-xs text-[#5E5B53]">
             <FileUp className="w-7 h-7 mx-auto mb-2 text-[#C4BCAE]" />
             拖入文件或粘贴网页链接即可开始精读与划线笔记
           </div>
-        ) : (
-          sources.map((src) => {
-            const active = src.id === activeSourceId;
-            const badge = badgeForType(src.type);
+        ) : groupByCategory ? (
+          groupedSources.map(([cat, items]) => {
+            const isCollapsed = Boolean(collapsedCategories[cat]);
             return (
-              <div
-                key={src.id}
-                onClick={() => onSelectSource(src.id)}
-                className={`group rounded-xl p-2.5 cursor-pointer transition border ${
-                  active
-                    ? 'bg-white border-[#B45309]/70 shadow-xs'
-                    : 'border-transparent hover:bg-white/70 hover:border-[#E5E0D5]'
-                }`}
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-center gap-1.5 min-w-0">
-                    {src.type === 'url' ? (
-                      <Globe className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+              <div key={cat} className="space-y-1">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setCollapsedCategories((prev) => ({ ...prev, [cat]: !prev[cat] }))
+                  }
+                  className="w-full flex items-center justify-between px-2 py-1 rounded-lg text-[11px] font-semibold text-[#5E5B53] hover:bg-white/70 hover:text-[#1C1B18] cursor-pointer"
+                >
+                  <span className="inline-flex items-center gap-1.5 min-w-0">
+                    {isCollapsed ? (
+                      <ChevronRight className="w-3.5 h-3.5 shrink-0" />
                     ) : (
-                      <FileText className="w-3.5 h-3.5 text-[#5E5B53] shrink-0" />
+                      <ChevronDown className="w-3.5 h-3.5 shrink-0" />
                     )}
-                    <span className="text-xs font-medium text-[#1C1B18] truncate">{src.title}</span>
+                    {isCollapsed ? (
+                      <Folder className="w-3.5 h-3.5 text-[#B45309] shrink-0" />
+                    ) : (
+                      <FolderOpen className="w-3.5 h-3.5 text-[#B45309] shrink-0" />
+                    )}
+                    <span className="truncate">{cat}</span>
+                  </span>
+                  <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-[#EFECE5] text-[#5E5B53]">
+                    {items.length}
+                  </span>
+                </button>
+                {!isCollapsed && (
+                  <div className="pl-2 space-y-1">
+                    {items.map((src, idx) => renderSourceItem(src, idx))}
                   </div>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (window.confirm(`删除素材《${src.title}》？其划线和对话也将移除。`)) {
-                        onDeleteSource(src.id);
-                      }
-                    }}
-                    className="opacity-100 md:opacity-0 md:group-hover:opacity-100 p-1 rounded text-[#5E5B53] hover:text-rose-600 cursor-pointer shrink-0"
-                    title="删除素材"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-
-                <div className="mt-1.5 flex items-center justify-between text-[11px] text-[#5E5B53]">
-                  <span className={`px-1.5 py-0.2 rounded border text-[10px] font-medium ${badge.cls}`}>
-                    {badge.label}
-                  </span>
-                  <span>
-                    {src.type === 'pdf' ? `${src.page_count} 页` : `${src.word_count} 字`}
-                    {src.highlight_count > 0 ? ` · ${src.highlight_count} 划线` : ''}
-                  </span>
-                </div>
+                )}
               </div>
             );
           })
+        ) : (
+          sources.map((src, idx) => renderSourceItem(src, idx))
         )}
       </div>
     </aside>

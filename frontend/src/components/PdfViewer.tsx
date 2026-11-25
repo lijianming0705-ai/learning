@@ -627,7 +627,10 @@ export function PdfViewer({
       {/* PDF Toolbar */}
       <div className="min-h-11 shrink-0 bg-white border-b border-[#E5E0D5] px-2.5 sm:px-4 py-1.5 flex flex-wrap items-center justify-between gap-2 eink-surface">
         <div className="flex items-center gap-2 min-w-0">
-          <span className="hidden md:inline text-xs font-semibold text-[#1C1B18] truncate max-w-[220px]">
+          <span
+            title={source.title}
+            className="hidden md:inline text-xs font-semibold text-[#1C1B18] truncate max-w-[220px]"
+          >
             {source.title}
           </span>
           <div className="flex items-center gap-1 text-xs text-[#5E5B53] md:border-l md:border-[#E5E0D5] md:pl-2">

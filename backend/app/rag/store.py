@@ -169,6 +169,13 @@ class RagStore:
                 (doc_id, title_tokens, content_tokens),
             )
 
+    def update_source_title(self, source_id: str, new_title: str) -> None:
+        with self._conn() as conn:
+            conn.execute(
+                "UPDATE rag_documents SET source_title = ?, updated_at = ? WHERE source_id = ?",
+                (new_title, utc_now_iso(), source_id),
+            )
+
     def delete_by_filter(
         self,
         *,

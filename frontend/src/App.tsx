@@ -297,6 +297,32 @@ export default function App() {
     }
   };
 
+  const handleUpdateSource = async (sourceId: string, patch: { title?: string; category?: string }) => {
+    if (!activeNotebook) return;
+    const updated = await api.updateSource(sourceId, patch);
+    setSources((prev) =>
+      prev.map((s) =>
+        s.id === sourceId ? { ...s, title: updated.title, category: updated.category, updated_at: updated.updated_at } : s,
+      ),
+    );
+    if (activeSource?.id === sourceId) {
+      setActiveSource(updated);
+    }
+    refreshSystem().catch(() => {});
+  };
+
+  const handleClassifySources = async () => {
+    if (!activeNotebook) return;
+    const res = await api.classifySources(activeNotebook.id, selectedModel);
+    setSources(res.sources);
+    if (activeSource) {
+      const matched = res.sources.find((s) => s.id === activeSource.id);
+      if (matched) {
+        setActiveSource((prev) => (prev ? { ...prev, category: matched.category } : prev));
+      }
+    }
+  };
+
   const QUICK_TRANSLATE_PROMPT =
     '请将这段划线英文翻译成自然流畅的中文，并拆解解释其中的核心词汇、专业术语、固定搭配与句式结构。';
 
@@ -591,6 +617,8 @@ export default function App() {
                 onSelectSource={(sid) => loadSource(sid)}
                 onUploadFiles={handleUploadFiles}
                 onImportUrl={handleImportUrl}
+                onUpdateSource={handleUpdateSource}
+                onClassifySources={handleClassifySources}
                 onDeleteSource={handleDeleteSource}
                 onCollapse={() => setLeftCollapsed(true)}
               />
@@ -614,6 +642,8 @@ export default function App() {
                     }}
                     onUploadFiles={handleUploadFiles}
                     onImportUrl={handleImportUrl}
+                    onUpdateSource={handleUpdateSource}
+                    onClassifySources={handleClassifySources}
                     onDeleteSource={handleDeleteSource}
                     onCollapse={() => setMobileDrawer('none')}
                   />

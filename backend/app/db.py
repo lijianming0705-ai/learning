@@ -31,6 +31,7 @@ CREATE TABLE IF NOT EXISTS sources (
     notebook_id TEXT NOT NULL REFERENCES notebooks(id) ON DELETE CASCADE,
     type TEXT NOT NULL,
     title TEXT NOT NULL,
+    category TEXT NOT NULL DEFAULT '',
     original_filename TEXT,
     source_url TEXT,
     file_path TEXT,
@@ -136,6 +137,9 @@ def init_study_db() -> None:
     ensure_data_dirs()
     with get_db() as conn:
         conn.executescript(SCHEMA_SQL)
+        cols = {r["name"] for r in conn.execute("PRAGMA table_info(sources)").fetchall()}
+        if "category" not in cols:
+            conn.execute("ALTER TABLE sources ADD COLUMN category TEXT NOT NULL DEFAULT ''")
         for key, value in DEFAULT_SETTINGS.items():
             conn.execute(
                 "INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)",

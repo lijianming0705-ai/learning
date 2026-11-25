@@ -25,6 +25,7 @@ export interface SourceSummary {
   notebook_id: string;
   type: 'pdf' | 'docx' | 'url' | 'text';
   title: string;
+  category: string;
   original_filename: string | null;
   source_url: string | null;
   page_count: number;
@@ -34,6 +35,12 @@ export interface SourceSummary {
   error_message: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface ClassifySourcesResponse {
+  classified_count: number;
+  categories: string[];
+  sources: SourceSummary[];
 }
 
 export interface SourcePage {

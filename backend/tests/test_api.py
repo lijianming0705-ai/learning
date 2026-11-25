@@ -120,7 +120,24 @@ def test_full_study_workflow_and_rag_persistence(test_client, tmp_path: Path) ->
     chat_sse = _parse_sse_events(chat_resp.text)
     assert any(name == "done" for name, _ in chat_sse)
 
-    # 9. Reindex & stats
+    # 9. Source rename + AI one-click classification
+    ren_resp = test_client.patch(
+        f"/api/sources/{source_id}",
+        json={"title": "Attention Is All You Need (精读版)"},
+    )
+    assert ren_resp.status_code == 200
+    assert ren_resp.json()["title"] == "Attention Is All You Need (精读版)"
+    rag_renamed = test_client.get("/api/rag/search", params={"q": "注意力机制", "doc_type": "qa_memory"}).json()
+    assert rag_renamed[0]["source_title"] == "Attention Is All You Need (精读版)"
+
+    cls_resp = test_client.post(f"/api/notebooks/{nb_id}/sources/classify", json={})
+    assert cls_resp.status_code == 200
+    cls_data = cls_resp.json()
+    assert cls_data["classified_count"] == 1
+    assert "核心论文" in cls_data["categories"]
+    assert cls_data["sources"][0]["category"] == "核心论文"
+
+    # 10. Reindex & stats
     stats_resp = test_client.get("/api/rag/stats")
     assert stats_resp.status_code == 200
     assert stats_resp.json()["total_documents"] >= 3
@@ -128,7 +145,7 @@ def test_full_study_workflow_and_rag_persistence(test_client, tmp_path: Path) ->
     assert reindex_resp.status_code == 200
     assert reindex_resp.json()["total_documents"] >= 3
 
-    # 10. Cascade delete notebook cleans up RAG
+    # 11. Cascade delete notebook cleans up RAG
     del_resp = test_client.delete(f"/api/notebooks/{nb_id}")
     assert del_resp.status_code == 200
     stats_after = test_client.get("/api/rag/stats").json()

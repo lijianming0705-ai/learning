@@ -68,10 +68,16 @@ export function Header({
             <BookOpenText className="w-4 h-4" />
           </div>
           <div className="leading-tight min-w-0">
-            <div className="text-sm font-semibold tracking-tight text-[#1C1B18] truncate max-w-[140px] sm:max-w-[260px]">
+            <div
+              title={activeNotebook ? activeNotebook.title : 'InkMind Study'}
+              className="text-sm font-semibold tracking-tight text-[#1C1B18] truncate max-w-[140px] sm:max-w-[260px]"
+            >
               {activeNotebook ? activeNotebook.title : 'InkMind Study'}
             </div>
-            <div className="hidden sm:block text-[11px] text-[#5E5B53] truncate">
+            <div
+              title={activeNotebook ? activeNotebook.description || '个人智能学习工作台' : '个人知识库 · 划线精读 · agy + RAG'}
+              className="hidden sm:block text-[11px] text-[#5E5B53] truncate"
+            >
               {activeNotebook ? activeNotebook.description || '个人智能学习工作台' : '个人知识库 · 划线精读 · agy + RAG'}
             </div>
           </div>

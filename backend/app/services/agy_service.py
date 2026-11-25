@@ -429,4 +429,64 @@ def build_notebook_chat_prompt(
     return "\n\n".join(sections)
 
 
+def build_classify_sources_prompt(*, notebook_title: str, sources: list[dict[str, str]]) -> str:
+    items_block = "\n".join(
+        f"- id={s['id']} | type={s['type']} | title={s['title']} | excerpt={s['excerpt'][:260]}"
+        for s in sources
+    )
+    return (
+        f"你是笔记本《{notebook_title}》的知识整理助手。请根据下方学习素材的标题和摘要，将所有素材归类为 2 到 6 个简洁清晰的中文主题分类（每个分类名称 2-8 个字，例如：核心论文、原理教程、实战笔记、参考资料、源码解析等）。\n"
+        "重要约束：不要调用任何工具；必须仅输出合法的 JSON 对象，不要包含额外解释文字，格式严格如下：\n"
+        '{"assignments": [{"id": "<素材id>", "category": "<分类名>"}]}\n\n'
+        f"【待分类素材列表】\n{items_block}"
+    )
+
+
+def parse_classification_json(raw: str) -> dict[str, str]:
+    text = raw.strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```(?:json)?\s*", "", text)
+        text = re.sub(r"\s*```$", "", text)
+    start = text.find("{")
+    end = text.rfind("}")
+    if start != -1 and end > start:
+        text = text[start : end + 1]
+    data = json.loads(text)
+    assignments = data.get("assignments") if isinstance(data, dict) else None
+    if not isinstance(assignments, list):
+        return {}
+    result: dict[str, str] = {}
+    for item in assignments:
+        if isinstance(item, dict) and item.get("id") and item.get("category"):
+            result[str(item["id"]).strip()] = str(item["category"]).strip()
+    return result
+
+
+async def classify_sources_with_agy(
+    *,
+    notebook_id: str,
+    notebook_title: str,
+    sources: list[dict[str, str]],
+    model: str,
+) -> dict[str, str]:
+    if not sources:
+        return {}
+    prompt = build_classify_sources_prompt(notebook_title=notebook_title, sources=sources)
+    chunks: list[str] = []
+    result_text = ""
+    async for kind, data in agy_service.stream_prompt(
+        thread_key=f"classify:{notebook_id}",
+        model=model,
+        prompt=prompt,
+    ):
+        if kind == "delta":
+            chunks.append(str(data))
+        elif kind == "result" and isinstance(data, dict):
+            result_text = str(data.get("response") or "")
+        elif kind == "error":
+            raise RuntimeError(str(data))
+    raw_output = result_text or "".join(chunks)
+    return parse_classification_json(raw_output)
+
+
 agy_service = AgyService()

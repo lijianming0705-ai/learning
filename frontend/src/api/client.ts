@@ -2,6 +2,7 @@ import type {
   AgyModel,
   AppSettings,
   ChatMessage,
+  ClassifySourcesResponse,
   ConversationDetail,
   ConversationSummary,
   HealthStatus,
@@ -71,6 +72,18 @@ export const api = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ url, title: title || null }),
+    }),
+  updateSource: (sourceId: string, payload: { title?: string; category?: string }) =>
+    requestJson<SourceDetail>(`/api/sources/${sourceId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }),
+  classifySources: (notebookId: string, model?: string) =>
+    requestJson<ClassifySourcesResponse>(`/api/notebooks/${notebookId}/sources/classify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: model || null }),
     }),
   deleteSource: (sourceId: string) => requestJson<{ deleted: boolean }>(`/api/sources/${sourceId}`, { method: 'DELETE' }),
 
