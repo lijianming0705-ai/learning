@@ -195,6 +195,51 @@ def test_full_study_workflow_and_rag_persistence(test_client, tmp_path: Path) ->
     assert scan_ask.status_code == 200
     assert "event: done" in scan_ask.text
 
+    # 9c. Selection pronunciation + full-text natural speech script + select-to-jump
+    sel_speech = test_client.post(
+        "/api/speech/selection",
+        json={
+            "text": "Scaled Dot-Product Attention uses Query, Key, and Value matrices.",
+            "source_id": source_id,
+            "page_number": 1,
+        },
+    )
+    assert sel_speech.status_code == 200
+    sel_data = sel_speech.json()
+    assert sel_data["language"] == "en-US"
+    assert sel_data["audio_url"]
+    assert sel_data["ipa_or_guide"]
+    clip_resp = test_client.get(sel_data["audio_url"])
+    assert clip_resp.status_code == 200
+    assert clip_resp.headers["content-type"].startswith("audio/")
+
+    gen_speech = test_client.post(f"/api/sources/{source_id}/speech-script", json={})
+    assert gen_speech.status_code == 200
+    segs = gen_speech.json()["segments"]
+    assert len(segs) == 2
+
+    get_speech = test_client.get(f"/api/sources/{source_id}/speech-script")
+    assert get_speech.status_code == 200
+    assert len(get_speech.json()["segments"]) == 2
+
+    seg_audio = test_client.get(segs[1]["audio_url"])
+    assert seg_audio.status_code == 200
+    assert seg_audio.headers["content-type"].startswith("audio/")
+
+    locate_seg2 = test_client.post(
+        f"/api/sources/{source_id}/speech-script/locate",
+        json={"text": "Multi-Head Attention allows parallel subspace attention", "page_number": 1},
+    )
+    assert locate_seg2.status_code == 200
+    assert locate_seg2.json()["segment_index"] == 1
+
+    locate_seg1 = test_client.post(
+        f"/api/sources/{source_id}/speech-script/locate",
+        json={"text": "Scaled Dot-Product Attention uses Query", "page_number": 1},
+    )
+    assert locate_seg1.status_code == 200
+    assert locate_seg1.json()["segment_index"] == 0
+
     # 10. Reindex & stats
     stats_resp = test_client.get("/api/rag/stats")
     assert stats_resp.status_code == 200

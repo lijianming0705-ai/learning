@@ -12,6 +12,7 @@ from typing import Any
 
 from app.config import AGY_BIN, DEFAULT_MODEL, ensure_data_dirs
 from app.schemas import AgyModelOut, HighlightOut, MessageOut, RagMemoryRef
+from app.services.tts_service import detect_language
 
 _ANSI_ESCAPE_RE = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
 _MODEL_LINE_RE = re.compile(r"^([a-z0-9][a-z0-9._-]{2,})\s+(.+)$")
@@ -542,6 +543,269 @@ async def ocr_highlight_image(
         elif kind == "error":
             raise RuntimeError(str(data))
     return (result_text or "".join(chunks)).strip()
+
+
+def _extract_json_object(raw: str) -> dict[str, Any]:
+    text = (raw or "").strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```(?:json)?\s*", "", text)
+        text = re.sub(r"\s*```$", "", text)
+    start = text.find("{")
+    end = text.rfind("}")
+    if start != -1 and end > start:
+        text = text[start : end + 1]
+    data = json.loads(text)
+    if not isinstance(data, dict):
+        raise ValueError("Expected JSON object")
+    return data
+
+
+def _clean_text_for_speech_fallback(text: str) -> str:
+    cleaned = re.sub(r"-\s*\n\s*", "", text or "")
+    cleaned = re.sub(r"\[\s*\d+(?:\s*[-–,]\s*\d+)*\s*\]", "", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    return cleaned
+
+
+def build_selection_speech_prompt(*, text: str, mode: str = "natural") -> str:
+    mode_hint = (
+        "若原文为英文，spoken_text 保留自然地道英文，同时可在 brief_meaning 中给出中文释义；"
+        if mode == "natural"
+        else "若原文为英文，spoken_text 可先用自然英文朗读核心句再附简短中文顺读衔接；"
+    )
+    return (
+        "你是一个专业的语音文本整理与发音指导助手。\n"
+        "请将用户选中的学习文本改写为适合 TTS 语音合成直接朗读的自然口语文本（spoken_text），"
+        "需要自动修复 PDF 断词换行、去除多余引用方括号 [1, 2]、将数学公式/符号/常见缩写展开为自然口语读法。\n"
+        f"{mode_hint}"
+        "如果选中内容主要是英文单词、短语或句子，请补充简洁的音标或连读提示（ipa_or_guide）以及一句简明中文释义（brief_meaning）；"
+        "如果是中文内容，spoken_text 保持自然流畅中文，ipa_or_guide 可留空或标注生僻字/外文术语读音，brief_meaning 用一句话概括核心含义。\n"
+        "重要约束：不要调用任何工具；必须仅输出严格合法的 JSON 对象，不要包含额外解释文字，格式如下：\n"
+        '{"spoken_text": "...", "language": "zh-CN 或 en-US", "ipa_or_guide": "...", "brief_meaning": "..."}\n\n'
+        f"【用户选中文本】\n{text[:4000]}"
+    )
+
+
+async def generate_selection_speech_with_agy(
+    *,
+    text: str,
+    model: str,
+    mode: str = "natural",
+) -> dict[str, str]:
+    prompt = build_selection_speech_prompt(text=text, mode=mode)
+    chunks: list[str] = []
+    result_text = ""
+    try:
+        async for kind, data in agy_service.stream_prompt(
+            thread_key=f"speech_sel:{mode}",
+            model=model,
+            prompt=prompt,
+        ):
+            if kind == "delta":
+                chunks.append(str(data))
+            elif kind == "result" and isinstance(data, dict):
+                result_text = str(data.get("response") or "")
+            elif kind == "error":
+                raise RuntimeError(str(data))
+        raw_output = (result_text or "".join(chunks)).strip()
+        parsed = _extract_json_object(raw_output)
+        spoken = str(parsed.get("spoken_text") or "").strip()
+        if not spoken:
+            raise ValueError("Empty spoken_text")
+        lang = detect_language(spoken, hint=str(parsed.get("language") or ""))
+        return {
+            "spoken_text": spoken,
+            "language": lang,
+            "ipa_or_guide": str(parsed.get("ipa_or_guide") or "").strip(),
+            "brief_meaning": str(parsed.get("brief_meaning") or "").strip(),
+        }
+    except Exception:
+        cleaned = _clean_text_for_speech_fallback(text)
+        return {
+            "spoken_text": cleaned,
+            "language": detect_language(cleaned),
+            "ipa_or_guide": "",
+            "brief_meaning": "",
+        }
+
+
+def _split_page_text_chunks(page_number: int, text: str, max_chars: int = 3200) -> list[tuple[int, str]]:
+    clean = (text or "").strip()
+    if not clean:
+        return []
+    if len(clean) <= max_chars:
+        return [(page_number, clean)]
+    chunks: list[tuple[int, str]] = []
+    start = 0
+    while start < len(clean):
+        end = min(len(clean), start + max_chars)
+        if end < len(clean):
+            split_at = max(clean.rfind("\n", start, end), clean.rfind("。", start, end), clean.rfind(". ", start, end))
+            if split_at > start + 600:
+                end = split_at + 1
+        part = clean[start:end].strip()
+        if part:
+            chunks.append((page_number, part))
+        start = end
+    return chunks
+
+
+def _batch_pages_for_speech(
+    pages: list[tuple[int, str]],
+    target_chars: int = 3200,
+    max_batches: int = 12,
+) -> list[list[tuple[int, str]]]:
+    expanded: list[tuple[int, str]] = []
+    for page_num, txt in pages:
+        expanded.extend(_split_page_text_chunks(page_num, txt, max_chars=target_chars))
+    batches: list[list[tuple[int, str]]] = []
+    current_batch: list[tuple[int, str]] = []
+    current_len = 0
+    for item in expanded:
+        item_len = len(item[1])
+        if current_batch and (current_len + item_len > target_chars):
+            batches.append(current_batch)
+            if len(batches) >= max_batches:
+                return batches
+            current_batch = []
+            current_len = 0
+        current_batch.append(item)
+        current_len += item_len
+    if current_batch and len(batches) < max_batches:
+        batches.append(current_batch)
+    return batches
+
+
+def _fallback_segments_for_batch(batch_pages: list[tuple[int, str]]) -> list[dict[str, Any]]:
+    segments: list[dict[str, Any]] = []
+    for page_num, text in batch_pages:
+        cleaned = _clean_text_for_speech_fallback(text)
+        if not cleaned:
+            continue
+        sentences = [s.strip() for s in re.split(r"(?<=[。！？.!?])\s+", cleaned) if s.strip()]
+        if not sentences:
+            sentences = [cleaned]
+        buf = ""
+        for sent in sentences:
+            if buf and len(buf) + len(sent) > 240:
+                segments.append(
+                    {
+                        "page_number": page_num,
+                        "heading": "",
+                        "original_excerpt": buf[:48],
+                        "spoken_text": buf,
+                        "language": detect_language(buf),
+                    }
+                )
+                buf = sent
+            else:
+                buf = f"{buf} {sent}".strip() if buf else sent
+        if buf:
+            segments.append(
+                {
+                    "page_number": page_num,
+                    "heading": "",
+                    "original_excerpt": buf[:48],
+                    "spoken_text": buf,
+                    "language": detect_language(buf),
+                }
+            )
+    return segments
+
+
+def build_full_speech_batch_prompt(
+    *,
+    source_title: str,
+    batch_pages: list[tuple[int, str]],
+    batch_index: int,
+    total_batches: int,
+) -> str:
+    pages_block = "\n\n".join(f"--- [Page {p}] ---\n{txt}" for p, txt in batch_pages)
+    return (
+        f"你是一个高水准的知识播客撰稿人与语音朗读编排助手，正在为学习资料《{source_title}》制作“全文自然朗读脚本”（第 {batch_index + 1}/{total_batches} 批）。\n"
+        "请将下方带页码标记的原文改写为适合人耳聆听、连贯自然的口语化分段朗读文本（segments）。\n"
+        "编写规则：\n"
+        "1. 保留忠实原意，同时去掉页眉页脚、孤立页码、纯 URL 和 `[1, 2]` 等引用编号，修复 PDF 断词换行。\n"
+        "2. 数学公式、特殊符号、表格摘要或英文缩写请改写成自然流畅的口语表达，方便直接语音合成播放。\n"
+        "3. 每段 spoken_text 控制在 80~280 字（约 2~5 句话），保持原文先后顺序，便于用户按段落播放与定位。\n"
+        "4. 每段必须精确标注所属整数 page_number，并在 original_excerpt 中原样摘录该段对应原文开头的 20~55 个字符（用于后续划词定位快速跳转到此段朗读位置）。\n"
+        "5. language 严格填 zh-CN 或 en-US。\n"
+        "重要约束：不要调用任何工具；必须仅输出严格合法的 JSON 对象，不要包含额外说明文字，格式如下：\n"
+        '{"segments": [{"page_number": 1, "heading": "简短小节标题或空字符串", "original_excerpt": "对应原文开头原样摘录", "spoken_text": "自然口语化朗读文本", "language": "zh-CN"}]}\n\n'
+        f"【原文内容】\n{pages_block}"
+    )
+
+
+async def generate_full_speech_script_with_agy(
+    *,
+    source_id: str,
+    source_title: str,
+    pages: list[tuple[int, str]],
+    model: str,
+) -> list[dict[str, Any]]:
+    batches = _batch_pages_for_speech(pages)
+    if not batches:
+        return []
+
+    all_segments: list[dict[str, Any]] = []
+    total_batches = len(batches)
+    for idx, batch_pages in enumerate(batches):
+        prompt = build_full_speech_batch_prompt(
+            source_title=source_title,
+            batch_pages=batch_pages,
+            batch_index=idx,
+            total_batches=total_batches,
+        )
+        chunks: list[str] = []
+        result_text = ""
+        parsed_segments: list[dict[str, Any]] = []
+        try:
+            async for kind, data in agy_service.stream_prompt(
+                thread_key=f"speech_full:{source_id}",
+                model=model,
+                prompt=prompt,
+            ):
+                if kind == "delta":
+                    chunks.append(str(data))
+                elif kind == "result" and isinstance(data, dict):
+                    result_text = str(data.get("response") or "")
+                elif kind == "error":
+                    raise RuntimeError(str(data))
+            raw_output = (result_text or "".join(chunks)).strip()
+            parsed_obj = _extract_json_object(raw_output)
+            raw_segs = parsed_obj.get("segments")
+            valid_pages = [p for p, _ in batch_pages]
+            default_page = valid_pages[0] if valid_pages else 1
+            if isinstance(raw_segs, list):
+                for item in raw_segs:
+                    if not isinstance(item, dict):
+                        continue
+                    spoken = str(item.get("spoken_text") or "").strip()
+                    if not spoken:
+                        continue
+                    try:
+                        pnum = int(item.get("page_number") or default_page)
+                    except (TypeError, ValueError):
+                        pnum = default_page
+                    if valid_pages and pnum not in valid_pages:
+                        pnum = min(valid_pages, key=lambda vp: abs(vp - pnum))
+                    parsed_segments.append(
+                        {
+                            "page_number": max(1, pnum),
+                            "heading": str(item.get("heading") or "").strip()[:120],
+                            "original_excerpt": str(item.get("original_excerpt") or "").strip()[:160] or spoken[:48],
+                            "spoken_text": spoken,
+                            "language": detect_language(spoken, hint=str(item.get("language") or "")),
+                        }
+                    )
+        except Exception:
+            parsed_segments = []
+
+        if not parsed_segments:
+            parsed_segments = _fallback_segments_for_batch(batch_pages)
+        all_segments.extend(parsed_segments)
+
+    return all_segments
 
 
 agy_service = AgyService()

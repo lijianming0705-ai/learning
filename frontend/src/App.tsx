@@ -1,13 +1,21 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
+  AudioLines,
   BookOpen,
   Database,
   FileText,
+  Loader2,
   MessageSquare,
   NotebookPen,
   PanelLeftOpen,
   PanelRightClose,
   PanelRightOpen,
+  Pause,
+  Play,
+  SkipBack,
+  SkipForward,
+  Square,
+  Volume2,
   X,
 } from 'lucide-react';
 import { api, streamHighlightAsk, streamNotebookChat } from './api/client';
@@ -18,9 +26,10 @@ import { NotebookGrid } from './components/NotebookGrid';
 import { PdfViewer } from './components/PdfViewer';
 import { RagExplorerPanel } from './components/RagExplorerPanel';
 import { RemarksPanel } from './components/RemarksPanel';
-import { SelectionPopover } from './components/SelectionPopover';
+import { SelectionPopover, type SelectionPopoverAction } from './components/SelectionPopover';
 import { SettingsModal } from './components/SettingsModal';
 import { SourceSidebar } from './components/SourceSidebar';
+import { SpeechPanel } from './components/SpeechPanel';
 import type {
   AgyModel,
   AppSettings,
@@ -33,11 +42,13 @@ import type {
   PendingSelection,
   RagMemoryRef,
   RagStats,
+  SelectionSpeechResult,
   SourceDetail,
   SourceSummary,
+  SpeechSegment,
 } from './types';
 
-type RightTab = 'remarks' | 'chat' | 'rag';
+type RightTab = 'remarks' | 'chat' | 'speech' | 'rag';
 
 export default function App() {
   const [health, setHealth] = useState<HealthStatus | null>(null);
@@ -83,6 +94,23 @@ export default function App() {
 
   // Quoted memory + modals + layout collapse
   const [quotedContext, setQuotedContext] = useState<string | null>(null);
+
+  // Speech & natural reading state
+  const [speechSegments, setSpeechSegments] = useState<SpeechSegment[]>([]);
+  const [speechGenerating, setSpeechGenerating] = useState(false);
+  const [activeSegmentIndex, setActiveSegmentIndex] = useState<number | null>(null);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [speechRate, setSpeechRate] = useState<number>(1.0);
+  const [autoSyncPage, setAutoSyncPage] = useState<boolean>(true);
+  const [selectionSpeech, setSelectionSpeech] = useState<SelectionSpeechResult | null>(null);
+  const [selectionSpeechLoading, setSelectionSpeechLoading] = useState(false);
+  const [selectionAudioPlaying, setSelectionAudioPlaying] = useState(false);
+
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const playModeRef = useRef<'none' | 'selection' | 'segment'>('none');
+  const onSegmentEndedRef = useRef<() => void>(() => {});
+  const onSelectionEndedRef = useRef<() => void>(() => {});
+
   const [showSettings, setShowSettings] = useState(false);
   const [showGlobalRag, setShowGlobalRag] = useState(false);
   const [toastError, setToastError] = useState<string | null>(null);
@@ -211,7 +239,203 @@ export default function App() {
     setTimeout(() => setToastError((cur) => (cur === msg ? null : cur)), 5000);
   };
 
+  const stopAllAudio = () => {
+    playModeRef.current = 'none';
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.removeAttribute('src');
+      audioRef.current.load();
+    }
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      try {
+        window.speechSynthesis.cancel();
+      } catch {
+        // ignore synthesis cancel errors
+      }
+    }
+    setIsSpeaking(false);
+    setSelectionAudioPlaying(false);
+  };
+
+  useEffect(() => {
+    const audio = new Audio();
+    audioRef.current = audio;
+
+    const handleEnded = () => {
+      if (playModeRef.current === 'segment') {
+        onSegmentEndedRef.current();
+      } else if (playModeRef.current === 'selection') {
+        onSelectionEndedRef.current();
+      }
+    };
+    audio.addEventListener('ended', handleEnded);
+    return () => {
+      audio.removeEventListener('ended', handleEnded);
+      audio.pause();
+      if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        try {
+          window.speechSynthesis.cancel();
+        } catch {
+          // ignore
+        }
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.playbackRate = speechRate;
+    }
+  }, [speechRate]);
+
+  const speakViaBrowserTts = (text: string, language: string, mode: 'selection' | 'segment') => {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+      showError('当前浏览器不支持语音播放');
+      stopAllAudio();
+      return;
+    }
+    try {
+      window.speechSynthesis.cancel();
+      const utter = new SpeechSynthesisUtterance(text);
+      utter.lang = language || 'zh-CN';
+      utter.rate = speechRate;
+      playModeRef.current = mode;
+      if (mode === 'segment') setIsSpeaking(true);
+      else setSelectionAudioPlaying(true);
+      utter.onend = () => {
+        if (playModeRef.current !== mode) return;
+        if (mode === 'segment') onSegmentEndedRef.current();
+        else onSelectionEndedRef.current();
+      };
+      utter.onerror = () => {
+        if (mode === 'segment') setIsSpeaking(false);
+        else setSelectionAudioPlaying(false);
+      };
+      window.speechSynthesis.speak(utter);
+    } catch {
+      if (mode === 'segment') setIsSpeaking(false);
+      else setSelectionAudioPlaying(false);
+    }
+  };
+
+  const playAudioUrlOrFallback = async (
+    audioUrl: string | null,
+    fallbackText: string,
+    fallbackLang: string,
+    mode: 'selection' | 'segment',
+  ) => {
+    stopAllAudio();
+    playModeRef.current = mode;
+    if (mode === 'segment') setIsSpeaking(true);
+    else setSelectionAudioPlaying(true);
+
+    if (audioUrl && audioRef.current) {
+      try {
+        audioRef.current.src = audioUrl;
+        audioRef.current.playbackRate = speechRate;
+        audioRef.current.onerror = () => {
+          if (playModeRef.current === mode) {
+            speakViaBrowserTts(fallbackText, fallbackLang, mode);
+          }
+        };
+        await audioRef.current.play();
+        return;
+      } catch {
+        // fallback to Web Speech API
+      }
+    }
+    speakViaBrowserTts(fallbackText, fallbackLang, mode);
+  };
+
+  const playSegmentAt = async (
+    index: number,
+    segmentsList: SpeechSegment[] = speechSegments,
+    syncPageOverride?: boolean,
+  ) => {
+    const seg = segmentsList[index];
+    if (!seg) return;
+    setActiveSegmentIndex(index);
+    const shouldSync = syncPageOverride ?? autoSyncPage;
+    if (shouldSync && seg.page_number) {
+      setJumpPage({ page: seg.page_number, seq: Date.now() });
+    }
+    const nextSeg = segmentsList[index + 1];
+    if (nextSeg?.audio_url) {
+      fetch(nextSeg.audio_url).catch(() => {});
+    }
+    await playAudioUrlOrFallback(seg.audio_url, seg.spoken_text, seg.language, 'segment');
+  };
+
+  onSegmentEndedRef.current = () => {
+    if (activeSegmentIndex !== null && activeSegmentIndex + 1 < speechSegments.length) {
+      void playSegmentAt(activeSegmentIndex + 1, speechSegments);
+    } else {
+      playModeRef.current = 'none';
+      setIsSpeaking(false);
+    }
+  };
+
+  onSelectionEndedRef.current = () => {
+    playModeRef.current = 'none';
+    setSelectionAudioPlaying(false);
+  };
+
+  const handleTogglePlayPause = () => {
+    if (speechSegments.length === 0) return;
+    if (isSpeaking) {
+      if (audioRef.current && audioRef.current.src && !audioRef.current.paused) {
+        audioRef.current.pause();
+      } else if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+      }
+      setIsSpeaking(false);
+      return;
+    }
+    if (
+      activeSegmentIndex !== null &&
+      playModeRef.current === 'segment' &&
+      audioRef.current &&
+      audioRef.current.src &&
+      audioRef.current.paused
+    ) {
+      audioRef.current.playbackRate = speechRate;
+      audioRef.current
+        .play()
+        .then(() => setIsSpeaking(true))
+        .catch(() => void playSegmentAt(activeSegmentIndex));
+      return;
+    }
+    void playSegmentAt(activeSegmentIndex ?? 0);
+  };
+
+  const handleStopSpeechPlayback = () => {
+    stopAllAudio();
+    setActiveSegmentIndex(null);
+  };
+
+  const handleGenerateSpeechScript = async (forceRegenerate = false): Promise<SpeechSegment[]> => {
+    if (!activeSource) return [];
+    setSpeechGenerating(true);
+    try {
+      const res = await api.generateSpeechScript(activeSource.id, selectedModel, forceRegenerate);
+      setSpeechSegments(res.segments);
+      if (forceRegenerate) {
+        handleStopSpeechPlayback();
+      }
+      return res.segments;
+    } catch (err) {
+      showError(err instanceof Error ? err.message : '生成全文自然朗读脚本失败');
+      return [];
+    } finally {
+      setSpeechGenerating(false);
+    }
+  };
+
   const openNotebook = async (nb: Notebook, targetSourceId?: string | null, targetHighlightId?: string | null, targetPage?: number | null) => {
+    stopAllAudio();
+    setSpeechSegments([]);
+    setActiveSegmentIndex(null);
+    setSelectionSpeech(null);
     setActiveNotebook(nb);
     setPendingSelection(null);
     setActiveHighlightId(null);
@@ -244,10 +468,14 @@ export default function App() {
   };
 
   const loadSource = async (sourceId: string, targetHighlightId?: string, targetPage?: number) => {
+    stopAllAudio();
+    setActiveSegmentIndex(null);
+    setSelectionSpeech(null);
     setSuppressAutoRestore(Boolean(targetHighlightId || targetPage));
-    const [detail, hls] = await Promise.all([
+    const [detail, hls, speechRes] = await Promise.all([
       api.getSource(sourceId),
       api.listSourceHighlights(sourceId),
+      api.getSpeechScript(sourceId).catch(() => ({ source_id: sourceId, source_title: '', segments: [] })),
     ]);
     try {
       localStorage.setItem(`inkmind.lastSource.${detail.notebook_id}`, detail.id);
@@ -256,6 +484,7 @@ export default function App() {
     }
     setActiveSource(detail);
     setHighlights(hls);
+    setSpeechSegments(speechRes.segments || []);
     setPendingSelection(null);
     if (targetHighlightId) {
       setActiveHighlightId(targetHighlightId);
@@ -387,8 +616,74 @@ export default function App() {
     }
   };
 
-  const handleSelectionAction = async (mode: 'highlight' | 'note' | 'ask' | 'translate' | 'ocr') => {
+  const handlePronounceSelection = async (sel: PendingSelection) => {
+    if (!activeSource) return;
+    const text = sel.quoteText.trim();
+    if (!text) return;
+    setRightTab('speech');
+    setRightCollapsed(false);
+    if (isCompactViewport) setMobileDrawer('right');
+    setSelectionSpeechLoading(true);
+    setSelectionSpeech(null);
+    stopAllAudio();
+    try {
+      const res = await api.pronounceSelection({
+        text,
+        source_id: activeSource.id,
+        page_number: sel.pageNumber,
+        model: selectedModel,
+        mode: 'natural',
+      });
+      setSelectionSpeech(res);
+      setSelectionSpeechLoading(false);
+      await playAudioUrlOrFallback(res.audio_url, res.spoken_text, res.language, 'selection');
+    } catch (err) {
+      setSelectionSpeechLoading(false);
+      showError(err instanceof Error ? err.message : '选取发音生成失败');
+    }
+  };
+
+  const handleReadFromSelection = async (sel: PendingSelection) => {
+    if (!activeSource) return;
+    const text = sel.quoteText.trim();
+    if (!text) return;
+    setRightTab('speech');
+    setRightCollapsed(false);
+    if (isCompactViewport) setMobileDrawer('right');
+
+    let segs = speechSegments;
+    if (segs.length === 0) {
+      segs = await handleGenerateSpeechScript(false);
+      if (segs.length === 0) return;
+    }
+
+    try {
+      const hit = await api.locateSpeechSegment(activeSource.id, {
+        text,
+        page_number: sel.pageNumber,
+      });
+      await playSegmentAt(hit.segment_index, segs, true);
+    } catch (err) {
+      showError(err instanceof Error ? err.message : '定位朗读位置失败');
+    }
+  };
+
+  const handleSelectionAction = async (mode: SelectionPopoverAction) => {
     if (!pendingSelection || !activeSource) return;
+    if (mode === 'pronounce') {
+      const sel = pendingSelection;
+      setPendingSelection(null);
+      window.getSelection()?.removeAllRanges();
+      void handlePronounceSelection(sel);
+      return;
+    }
+    if (mode === 'read_from_here') {
+      const sel = pendingSelection;
+      setPendingSelection(null);
+      window.getSelection()?.removeAllRanges();
+      void handleReadFromSelection(sel);
+      return;
+    }
     try {
       const created = await api.createHighlight(activeSource.id, {
         color: selectionColor,
@@ -633,6 +928,10 @@ export default function App() {
       <Header
         activeNotebook={activeNotebook}
         onBackToNotebooks={() => {
+          stopAllAudio();
+          setSpeechSegments([]);
+          setActiveSegmentIndex(null);
+          setSelectionSpeech(null);
           setActiveNotebook(null);
           setActiveSource(null);
           setPendingSelection(null);
@@ -802,6 +1101,109 @@ export default function App() {
                   onTextSelected={setPendingSelection}
                 />
               )}
+
+              {/* Compact Sticky Mini Audio Player Bar */}
+              {activeSource && (isSpeaking || activeSegmentIndex !== null || selectionSpeechLoading || selectionAudioPlaying) && (
+                <div className="shrink-0 border-t border-[#E5E0D5] bg-white/95 backdrop-blur px-3 py-2 flex items-center justify-between gap-2 z-20 eink-surface">
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    {selectionSpeechLoading ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin text-teal-600 shrink-0" />
+                        <span className="text-xs text-[#5E5B53] truncate">正在生成选中发音文本与音频...</span>
+                      </>
+                    ) : selectionAudioPlaying && selectionSpeech ? (
+                      <>
+                        <Volume2 className="w-4 h-4 text-teal-600 animate-pulse shrink-0" />
+                        <span className="text-xs text-[#1C1B18] truncate font-medium">
+                          发音：{selectionSpeech.spoken_text}
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <AudioLines className={`w-4 h-4 shrink-0 ${isSpeaking ? 'text-[#B45309] animate-pulse' : 'text-[#8E897E]'}`} />
+                        <div className="min-w-0 flex-1">
+                          <div className="text-xs font-medium text-[#1C1B18] truncate">
+                            {activeSegmentIndex !== null && speechSegments[activeSegmentIndex]
+                              ? speechSegments[activeSegmentIndex].spoken_text
+                              : '全文自然朗读'}
+                          </div>
+                          {activeSegmentIndex !== null && speechSegments[activeSegmentIndex] && (
+                            <div className="text-[10px] text-[#8E897E]">
+                              第 {activeSegmentIndex + 1}/{speechSegments.length} 段 · P.{speechSegments[activeSegmentIndex].page_number} · {speechRate}x
+                            </div>
+                          )}
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-1 shrink-0">
+                    {selectionAudioPlaying ? (
+                      <button
+                        type="button"
+                        onClick={stopAllAudio}
+                        className="p-1.5 rounded-lg bg-teal-600 text-white cursor-pointer"
+                        title="停止发音"
+                      >
+                        <Square className="w-3.5 h-3.5 fill-current" />
+                      </button>
+                    ) : activeSegmentIndex !== null && speechSegments.length > 0 ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (activeSegmentIndex > 0) void playSegmentAt(activeSegmentIndex - 1);
+                          }}
+                          disabled={activeSegmentIndex <= 0}
+                          className="p-1.5 rounded-lg text-[#5E5B53] hover:bg-[#EFECE5] disabled:opacity-40 cursor-pointer"
+                          title="上一段"
+                        >
+                          <SkipBack className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleTogglePlayPause}
+                          className="p-1.5 rounded-lg bg-[#B45309] text-white cursor-pointer"
+                          title={isSpeaking ? '暂停' : '继续'}
+                        >
+                          {isSpeaking ? <Pause className="w-3.5 h-3.5 fill-current" /> : <Play className="w-3.5 h-3.5 fill-current" />}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (activeSegmentIndex + 1 < speechSegments.length) void playSegmentAt(activeSegmentIndex + 1);
+                          }}
+                          disabled={activeSegmentIndex >= speechSegments.length - 1}
+                          className="p-1.5 rounded-lg text-[#5E5B53] hover:bg-[#EFECE5] disabled:opacity-40 cursor-pointer"
+                          title="下一段"
+                        >
+                          <SkipForward className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleStopSpeechPlayback}
+                          className="p-1.5 rounded-lg text-[#5E5B53] hover:text-rose-700 cursor-pointer"
+                          title="停止朗读"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </>
+                    ) : null}
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setRightTab('speech');
+                        setRightCollapsed(false);
+                        if (isCompactViewport) setMobileDrawer('right');
+                      }}
+                      className="px-2 py-1 rounded-lg border border-[#E5E0D5] text-[11px] font-medium text-[#5E5B53] hover:text-[#1C1B18] cursor-pointer"
+                    >
+                      朗读文本
+                    </button>
+                  </div>
+                </div>
+              )}
             </section>
 
             {/* Right Panel Backdrop for Mobile/Tablet */}
@@ -821,41 +1223,53 @@ export default function App() {
                     : 'w-[380px] xl:w-[420px] shrink-0 border-l border-[#E5E0D5] bg-white flex flex-col min-h-0 eink-surface'
                 }
               >
-                <div className="h-11 shrink-0 border-b border-[#E5E0D5] px-2 flex items-center gap-1 bg-[#FAF8F4] eink-surface">
+                <div className="h-11 shrink-0 border-b border-[#E5E0D5] px-1.5 flex items-center gap-1 bg-[#FAF8F4] eink-surface">
                   <button
                     onClick={() => setRightTab('remarks')}
-                    className={`flex-1 inline-flex items-center justify-center gap-1 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition ${
+                    className={`flex-1 inline-flex items-center justify-center gap-1 py-1.5 px-1 rounded-lg text-xs font-medium cursor-pointer transition ${
                       rightTab === 'remarks'
                         ? 'bg-white text-[#B45309] shadow-xs border border-[#E5E0D5]'
                         : 'text-[#5E5B53] hover:text-[#1C1B18]'
                     }`}
                   >
-                    <NotebookPen className="w-3.5 h-3.5" />
-                    <span>划线备注 ({highlights.length})</span>
+                    <NotebookPen className="w-3.5 h-3.5 shrink-0" />
+                    <span className="truncate">备注 ({highlights.length})</span>
                   </button>
 
                   <button
                     onClick={() => setRightTab('chat')}
-                    className={`flex-1 inline-flex items-center justify-center gap-1 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition ${
+                    className={`flex-1 inline-flex items-center justify-center gap-1 py-1.5 px-1 rounded-lg text-xs font-medium cursor-pointer transition ${
                       rightTab === 'chat'
                         ? 'bg-white text-[#B45309] shadow-xs border border-[#E5E0D5]'
                         : 'text-[#5E5B53] hover:text-[#1C1B18]'
                     }`}
                   >
-                    <MessageSquare className="w-3.5 h-3.5" />
-                    <span>AI 对话</span>
+                    <MessageSquare className="w-3.5 h-3.5 shrink-0" />
+                    <span className="truncate">对话</span>
+                  </button>
+
+                  <button
+                    onClick={() => setRightTab('speech')}
+                    className={`flex-1 inline-flex items-center justify-center gap-1 py-1.5 px-1 rounded-lg text-xs font-medium cursor-pointer transition ${
+                      rightTab === 'speech'
+                        ? 'bg-white text-[#B45309] shadow-xs border border-[#E5E0D5]'
+                        : 'text-[#5E5B53] hover:text-[#1C1B18]'
+                    }`}
+                  >
+                    <AudioLines className="w-3.5 h-3.5 shrink-0" />
+                    <span className="truncate">语音{speechSegments.length > 0 ? ` (${speechSegments.length})` : ''}</span>
                   </button>
 
                   <button
                     onClick={() => setRightTab('rag')}
-                    className={`flex-1 inline-flex items-center justify-center gap-1 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition ${
+                    className={`flex-1 inline-flex items-center justify-center gap-1 py-1.5 px-1 rounded-lg text-xs font-medium cursor-pointer transition ${
                       rightTab === 'rag'
                         ? 'bg-white text-[#B45309] shadow-xs border border-[#E5E0D5]'
                         : 'text-[#5E5B53] hover:text-[#1C1B18]'
                     }`}
                   >
-                    <Database className="w-3.5 h-3.5" />
-                    <span>RAG 记忆</span>
+                    <Database className="w-3.5 h-3.5 shrink-0" />
+                    <span className="truncate">RAG</span>
                   </button>
 
                   <button
@@ -923,6 +1337,60 @@ export default function App() {
                     />
                   )}
 
+                  {rightTab === 'speech' && (
+                    <SpeechPanel
+                      hasSource={Boolean(activeSource)}
+                      sourceTitle={activeSource?.title || ''}
+                      segments={speechSegments}
+                      generating={speechGenerating}
+                      activeSegmentIndex={activeSegmentIndex}
+                      isPlaying={isSpeaking}
+                      speechRate={speechRate}
+                      autoSyncPage={autoSyncPage}
+                      models={models}
+                      selectedModel={selectedModel}
+                      selectionSpeech={selectionSpeech}
+                      selectionSpeechLoading={selectionSpeechLoading}
+                      selectionPlaying={selectionAudioPlaying}
+                      onSelectModel={setSelectedModel}
+                      onGenerateScript={(force) => {
+                        void handleGenerateSpeechScript(Boolean(force));
+                      }}
+                      onPlaySegment={(idx) => {
+                        void playSegmentAt(idx);
+                      }}
+                      onTogglePlayPause={handleTogglePlayPause}
+                      onPrevSegment={() => {
+                        if (activeSegmentIndex !== null && activeSegmentIndex > 0) {
+                          void playSegmentAt(activeSegmentIndex - 1);
+                        }
+                      }}
+                      onNextSegment={() => {
+                        if (activeSegmentIndex !== null && activeSegmentIndex + 1 < speechSegments.length) {
+                          void playSegmentAt(activeSegmentIndex + 1);
+                        }
+                      }}
+                      onStopPlayback={handleStopSpeechPlayback}
+                      onChangeRate={setSpeechRate}
+                      onToggleAutoSyncPage={setAutoSyncPage}
+                      onReplaySelectionSpeech={() => {
+                        if (selectionSpeech) {
+                          void playAudioUrlOrFallback(
+                            selectionSpeech.audio_url,
+                            selectionSpeech.spoken_text,
+                            selectionSpeech.language,
+                            'selection',
+                          );
+                        }
+                      }}
+                      onStopSelectionSpeech={stopAllAudio}
+                      onClearSelectionSpeech={() => {
+                        if (selectionAudioPlaying) stopAllAudio();
+                        setSelectionSpeech(null);
+                      }}
+                    />
+                  )}
+
                   {rightTab === 'rag' && (
                     <RagExplorerPanel
                       notebookId={activeNotebook.id}
@@ -942,7 +1410,7 @@ export default function App() {
 
           {/* Mobile / Tablet Bottom Navigation Bar */}
           {isCompactViewport && (
-            <nav className="lg:hidden shrink-0 border-t border-[#E5E0D5] bg-white safe-pb grid grid-cols-4 z-20 eink-surface">
+            <nav className="lg:hidden shrink-0 border-t border-[#E5E0D5] bg-white safe-pb grid grid-cols-5 z-20 eink-surface">
               <button
                 type="button"
                 onClick={() => setMobileDrawer((d) => (d === 'sources' ? 'none' : 'sources'))}
@@ -968,19 +1436,39 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => {
-                  if (mobileDrawer === 'right' && rightTab !== 'rag') {
+                  if (mobileDrawer === 'right' && (rightTab === 'remarks' || rightTab === 'chat')) {
                     setMobileDrawer('none');
                   } else {
-                    if (rightTab === 'rag') setRightTab('remarks');
+                    if (rightTab === 'rag' || rightTab === 'speech') setRightTab('remarks');
                     setMobileDrawer('right');
                   }
                 }}
                 className={`min-h-[50px] flex flex-col items-center justify-center gap-0.5 text-[11px] font-medium cursor-pointer ${
-                  mobileDrawer === 'right' && rightTab !== 'rag' ? 'text-[#B45309]' : 'text-[#5E5B53]'
+                  mobileDrawer === 'right' && (rightTab === 'remarks' || rightTab === 'chat')
+                    ? 'text-[#B45309]'
+                    : 'text-[#5E5B53]'
                 }`}
               >
                 <NotebookPen className="w-4 h-4" />
                 <span>笔记/AI{highlights.length > 0 ? ` (${highlights.length})` : ''}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  if (mobileDrawer === 'right' && rightTab === 'speech') {
+                    setMobileDrawer('none');
+                  } else {
+                    setRightTab('speech');
+                    setMobileDrawer('right');
+                  }
+                }}
+                className={`min-h-[50px] flex flex-col items-center justify-center gap-0.5 text-[11px] font-medium cursor-pointer ${
+                  mobileDrawer === 'right' && rightTab === 'speech' ? 'text-[#B45309]' : 'text-[#5E5B53]'
+                }`}
+              >
+                <AudioLines className="w-4 h-4" />
+                <span>语音</span>
               </button>
 
               <button
@@ -998,7 +1486,7 @@ export default function App() {
                 }`}
               >
                 <Database className="w-4 h-4" />
-                <span>RAG 记忆</span>
+                <span>RAG</span>
               </button>
             </nav>
           )}
@@ -1009,6 +1497,7 @@ export default function App() {
         <SelectionPopover
           selection={pendingSelection}
           selectedColor={selectionColor}
+          hasSpeechScript={speechSegments.length > 0}
           onChangeColor={setSelectionColor}
           onAction={handleSelectionAction}
           onClose={() => setPendingSelection(null)}

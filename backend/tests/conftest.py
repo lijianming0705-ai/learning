@@ -39,6 +39,42 @@ def test_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
             )
         elif thread_key.startswith("ocr:"):
             answer = "识别文本：E = mc^2（质能等价公式）"
+        elif thread_key.startswith("speech_sel:"):
+            import json
+
+            answer = json.dumps(
+                {
+                    "spoken_text": "Scaled Dot-Product Attention uses Query, Key, and Value matrices.",
+                    "language": "en-US",
+                    "ipa_or_guide": "/skeɪld dɒt ˈprɒdʌkt əˈtɛnʃən/",
+                    "brief_meaning": "缩放点积注意力使用查询、键和值矩阵。",
+                },
+                ensure_ascii=False,
+            )
+        elif thread_key.startswith("speech_full:"):
+            import json
+
+            answer = json.dumps(
+                {
+                    "segments": [
+                        {
+                            "page_number": 1,
+                            "heading": "核心架构",
+                            "original_excerpt": "Scaled Dot-Product Attention uses Query",
+                            "spoken_text": "第一部分介绍缩放点积注意力机制，它通过 Query、Key 与 Value 三个矩阵完成计算。",
+                            "language": "zh-CN",
+                        },
+                        {
+                            "page_number": 1,
+                            "heading": "多头并行",
+                            "original_excerpt": "Multi-Head Attention allows parallel subspace attention",
+                            "spoken_text": "第二部分讲解多头注意力机制，它允许模型并行关注不同子空间中的特征关联。",
+                            "language": "zh-CN",
+                        },
+                    ]
+                },
+                ensure_ascii=False,
+            )
         else:
             answer = f"这是针对问题的精炼解析（模型 {model}）：注意力机制通过 Query、Key、Value 计算相关性权重。"
         yield ("delta", answer[:18])
@@ -54,8 +90,19 @@ def test_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
             },
         )
 
+    async def fake_synthesize_to_file(text: str, language: str, out_base_path: Path) -> Path | None:
+        out_base_path.parent.mkdir(parents=True, exist_ok=True)
+        mp3_path = out_base_path.with_suffix(".mp3")
+        mp3_path.write_bytes(b"ID3\x03\x00\x00\x00\x00\x00\x00" + b"\x00" * 160)
+        return mp3_path
+
+    import app.routers.speech as speech_router
+    import app.services.tts_service as tts_service
+
     monkeypatch.setattr(agy_service, "list_models", fake_list_models)
     monkeypatch.setattr(agy_service, "stream_prompt", fake_stream_prompt)
+    monkeypatch.setattr(tts_service, "synthesize_to_file", fake_synthesize_to_file)
+    monkeypatch.setattr(speech_router, "synthesize_to_file", fake_synthesize_to_file)
 
     with TestClient(app) as client:
         yield client

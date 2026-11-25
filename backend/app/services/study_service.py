@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 import uuid
 from pathlib import Path
@@ -9,6 +10,7 @@ from typing import Any
 from app.config import DEFAULT_MODEL, ensure_data_dirs
 from app.db import DEFAULT_SETTINGS, get_db, utc_now_iso
 from app.rag.store import RagHit, rag_store
+from app.rag.tokenizer import extract_hybrid_tokens
 from app.schemas import (
     ConversationDetail,
     ConversationOut,
@@ -16,6 +18,7 @@ from app.schemas import (
     HighlightOut,
     HighlightRect,
     HighlightUpdate,
+    LocateSpeechResponse,
     MessageOut,
     NotebookCreate,
     NotebookOut,
@@ -27,6 +30,7 @@ from app.schemas import (
     SourcePageOut,
     SourceSummary,
     SourceUpdate,
+    SpeechSegmentOut,
 )
 from app.services.source_parser import ParsedSource, chunk_text, crop_pdf_region
 
@@ -162,6 +166,15 @@ def delete_notebook(notebook_id: str) -> bool:
             "SELECT image_path FROM highlights WHERE notebook_id = ? AND image_path IS NOT NULL",
             (notebook_id,),
         ).fetchall()
+        speech_rows = conn.execute(
+            """
+            SELECT sp.audio_path
+            FROM source_speech_segments sp
+            JOIN sources s ON s.id = sp.source_id
+            WHERE s.notebook_id = ? AND sp.audio_path IS NOT NULL
+            """,
+            (notebook_id,),
+        ).fetchall()
         cur = conn.execute("DELETE FROM notebooks WHERE id = ?", (notebook_id,))
         if cur.rowcount == 0:
             return False
@@ -174,6 +187,8 @@ def delete_notebook(notebook_id: str) -> bool:
         cp = Path(cr["image_path"])
         if cp.exists():
             cp.unlink(missing_ok=True)
+    for sr in speech_rows:
+        Path(sr["audio_path"]).unlink(missing_ok=True)
     uploads_nb_dir = ensure_data_dirs().uploads_dir / notebook_id
     if uploads_nb_dir.exists() and not any(uploads_nb_dir.iterdir()):
         uploads_nb_dir.rmdir()
@@ -405,6 +420,10 @@ def delete_source(source_id: str) -> bool:
             "SELECT image_path FROM highlights WHERE source_id = ? AND image_path IS NOT NULL",
             (source_id,),
         ).fetchall()
+        speech_rows = conn.execute(
+            "SELECT audio_path FROM source_speech_segments WHERE source_id = ? AND audio_path IS NOT NULL",
+            (source_id,),
+        ).fetchall()
         conn.execute("DELETE FROM sources WHERE id = ?", (source_id,))
         conn.execute("UPDATE notebooks SET updated_at = ? WHERE id = ?", (utc_now_iso(), row["notebook_id"]))
 
@@ -412,6 +431,8 @@ def delete_source(source_id: str) -> bool:
         Path(row["file_path"]).unlink(missing_ok=True)
     for cr in crop_rows:
         Path(cr["image_path"]).unlink(missing_ok=True)
+    for sr in speech_rows:
+        Path(sr["audio_path"]).unlink(missing_ok=True)
     rag_store.delete_by_filter(source_id=source_id)
     return True
 
@@ -1084,4 +1105,168 @@ def _row_to_message(row: sqlite3.Row) -> MessageOut:
         retrieved_memories=memories,
         duration_seconds=row["duration_seconds"],
         created_at=row["created_at"],
+    )
+
+
+# ── Speech Script & Segment Location ───────────────────────────────────────────
+
+
+def list_speech_segments(source_id: str) -> list[SpeechSegmentOut]:
+    with get_db() as conn:
+        rows = conn.execute(
+            """
+            SELECT id, source_id, segment_index, page_number, heading, original_excerpt, spoken_text, language
+            FROM source_speech_segments
+            WHERE source_id = ?
+            ORDER BY segment_index ASC
+            """,
+            (source_id,),
+        ).fetchall()
+    return [
+        SpeechSegmentOut(
+            id=r["id"],
+            source_id=r["source_id"],
+            segment_index=int(r["segment_index"]),
+            page_number=int(r["page_number"]),
+            heading=r["heading"] or "",
+            original_excerpt=r["original_excerpt"] or "",
+            spoken_text=r["spoken_text"],
+            language=r["language"] or "zh-CN",
+            audio_url=f"/api/speech/segments/{r['id']}/audio",
+        )
+        for r in rows
+    ]
+
+
+def replace_source_speech_segments(source_id: str, segments: list[dict[str, Any]]) -> list[SpeechSegmentOut]:
+    now = utc_now_iso()
+    with get_db() as conn:
+        old_rows = conn.execute(
+            "SELECT audio_path FROM source_speech_segments WHERE source_id = ? AND audio_path IS NOT NULL",
+            (source_id,),
+        ).fetchall()
+        conn.execute("DELETE FROM source_speech_segments WHERE source_id = ?", (source_id,))
+        for idx, seg in enumerate(segments):
+            seg_id = new_id()
+            conn.execute(
+                """
+                INSERT INTO source_speech_segments (
+                    id, source_id, segment_index, page_number, heading, original_excerpt,
+                    spoken_text, language, audio_path, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
+                """,
+                (
+                    seg_id,
+                    source_id,
+                    idx,
+                    max(1, int(seg.get("page_number") or 1)),
+                    str(seg.get("heading") or "")[:120],
+                    str(seg.get("original_excerpt") or "")[:160],
+                    str(seg.get("spoken_text") or "").strip(),
+                    str(seg.get("language") or "zh-CN"),
+                    now,
+                ),
+            )
+    for r in old_rows:
+        Path(r["audio_path"]).unlink(missing_ok=True)
+    return list_speech_segments(source_id)
+
+
+def get_speech_segment_record(segment_id: str) -> dict[str, Any] | None:
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT * FROM source_speech_segments WHERE id = ?",
+            (segment_id,),
+        ).fetchone()
+    if not row:
+        return None
+    return dict(row)
+
+
+def set_speech_segment_audio_path(segment_id: str, audio_path: str) -> None:
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE source_speech_segments SET audio_path = ? WHERE id = ?",
+            (audio_path, segment_id),
+        )
+
+
+_LOCATE_PUNCT_RE = re.compile(r"[\s\W_]+", re.UNICODE)
+
+
+def _normalize_for_match(text: str) -> str:
+    return _LOCATE_PUNCT_RE.sub("", (text or "").lower())
+
+
+def locate_speech_segment(
+    source_id: str,
+    selected_text: str,
+    page_number: int | None = None,
+) -> LocateSpeechResponse | None:
+    segments = list_speech_segments(source_id)
+    if not segments:
+        return None
+
+    query_raw = " ".join((selected_text or "").split()).strip()
+    query_compact = _normalize_for_match(query_raw)
+    query_tokens = set(extract_hybrid_tokens(query_raw, include_trigrams=True))
+    query_trigrams = (
+        {query_compact[i : i + 3] for i in range(max(0, len(query_compact) - 2))}
+        if len(query_compact) >= 3
+        else ({query_compact} if query_compact else set())
+    )
+    query_prefix = query_compact[:24]
+
+    best_seg = segments[0]
+    best_score = -999.0
+
+    for seg in segments:
+        score = 0.0
+        excerpt_compact = _normalize_for_match(seg.original_excerpt)
+        spoken_compact = _normalize_for_match(seg.spoken_text)
+        combined_text = f"{seg.heading} {seg.original_excerpt} {seg.spoken_text}"
+
+        if query_compact and len(query_compact) >= 4:
+            if query_compact in excerpt_compact or excerpt_compact and excerpt_compact in query_compact:
+                score += 12.0
+            elif query_prefix and len(query_prefix) >= 6 and query_prefix in excerpt_compact:
+                score += 9.5
+            if query_compact in spoken_compact or (len(query_prefix) >= 6 and query_prefix in spoken_compact):
+                score += 9.0
+
+        if query_tokens:
+            seg_tokens = set(extract_hybrid_tokens(combined_text, include_trigrams=True))
+            if seg_tokens:
+                overlap = len(query_tokens & seg_tokens) / len(query_tokens)
+                score += 6.0 * overlap
+
+        if query_trigrams:
+            combined_compact = excerpt_compact + spoken_compact
+            seg_trigrams = (
+                {combined_compact[i : i + 3] for i in range(max(0, len(combined_compact) - 2))}
+                if len(combined_compact) >= 3
+                else set()
+            )
+            if seg_trigrams:
+                tri_overlap = len(query_trigrams & seg_trigrams) / len(query_trigrams)
+                score += 4.0 * tri_overlap
+
+        if page_number is not None:
+            diff = abs(seg.page_number - page_number)
+            if diff == 0:
+                score += 3.0
+            elif diff == 1:
+                score += 1.0
+            else:
+                score -= 0.15 * min(diff, 10)
+
+        if score > best_score:
+            best_score = score
+            best_seg = seg
+
+    return LocateSpeechResponse(
+        segment_index=best_seg.segment_index,
+        segment_id=best_seg.id,
+        page_number=best_seg.page_number,
+        score=round(best_score, 3),
     )

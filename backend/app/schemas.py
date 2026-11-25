@@ -235,3 +235,55 @@ class HealthOut(BaseModel):
     agy_path: str | None
     agy_warm_workers: int
     rag_documents: int
+
+
+class SelectionSpeechRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=6000)
+    source_id: str | None = None
+    page_number: int | None = None
+    model: str | None = None
+    mode: Literal["natural", "bilingual"] = "natural"
+
+
+class SelectionSpeechResponse(BaseModel):
+    original_text: str
+    spoken_text: str
+    language: str
+    ipa_or_guide: str = ""
+    brief_meaning: str = ""
+    audio_url: str | None = None
+
+
+class SpeechSegmentOut(BaseModel):
+    id: str
+    source_id: str
+    segment_index: int
+    page_number: int
+    heading: str = ""
+    original_excerpt: str = ""
+    spoken_text: str
+    language: str
+    audio_url: str
+
+
+class GenerateSpeechScriptRequest(BaseModel):
+    model: str | None = None
+    force_regenerate: bool = False
+
+
+class SpeechScriptResponse(BaseModel):
+    source_id: str
+    source_title: str = ""
+    segments: list[SpeechSegmentOut] = Field(default_factory=list)
+
+
+class LocateSpeechRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=4000)
+    page_number: int | None = None
+
+
+class LocateSpeechResponse(BaseModel):
+    segment_index: int
+    segment_id: str
+    page_number: int
+    score: float

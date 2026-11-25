@@ -166,3 +166,37 @@ export interface PendingSelection {
   clientX: number;
   clientY: number;
 }
+
+export interface SelectionSpeechResult {
+  original_text: string;
+  spoken_text: string;
+  language: string;
+  ipa_or_guide: string;
+  brief_meaning: string;
+  audio_url: string | null;
+}
+
+export interface SpeechSegment {
+  id: string;
+  source_id: string;
+  segment_index: number;
+  page_number: number;
+  heading: string;
+  original_excerpt: string;
+  spoken_text: string;
+  language: string;
+  audio_url: string;
+}
+
+export interface SpeechScriptResponse {
+  source_id: string;
+  source_title: string;
+  segments: SpeechSegment[];
+}
+
+export interface LocateSpeechResponse {
+  segment_index: number;
+  segment_id: string;
+  page_number: number;
+  score: number;
+}

@@ -9,11 +9,14 @@ import type {
   Highlight,
   HighlightColor,
   HighlightRect,
+  LocateSpeechResponse,
   Notebook,
   RagMemoryRef,
   RagStats,
+  SelectionSpeechResult,
   SourceDetail,
   SourceSummary,
+  SpeechScriptResponse,
 } from '../types';
 
 async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
@@ -152,6 +155,33 @@ export const api = {
   },
   ragStats: () => requestJson<RagStats>('/api/rag/stats'),
   ragReindex: () => requestJson<RagStats>('/api/rag/reindex', { method: 'POST' }),
+
+  pronounceSelection: (payload: {
+    text: string;
+    source_id?: string;
+    page_number?: number;
+    model?: string;
+    mode?: 'natural' | 'bilingual';
+  }) =>
+    requestJson<SelectionSpeechResult>('/api/speech/selection', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }),
+  getSpeechScript: (sourceId: string) =>
+    requestJson<SpeechScriptResponse>(`/api/sources/${sourceId}/speech-script`),
+  generateSpeechScript: (sourceId: string, model?: string, forceRegenerate?: boolean) =>
+    requestJson<SpeechScriptResponse>(`/api/sources/${sourceId}/speech-script`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: model || null, force_regenerate: Boolean(forceRegenerate) }),
+    }),
+  locateSpeechSegment: (sourceId: string, payload: { text: string; page_number?: number }) =>
+    requestJson<LocateSpeechResponse>(`/api/sources/${sourceId}/speech-script/locate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }),
 };
 
 export interface StreamCallbacks {

@@ -16,6 +16,7 @@ class AppPaths:
     uploads_dir: Path
     agy_workdir: Path
     crops_dir: Path
+    speech_dir: Path
 
 
 def get_paths() -> AppPaths:
@@ -29,6 +30,7 @@ def get_paths() -> AppPaths:
         uploads_dir=data_dir / "uploads",
         agy_workdir=agy_workdir,
         crops_dir=agy_workdir / "crops",
+        speech_dir=data_dir / "speech",
     )
 
 
@@ -38,6 +40,7 @@ def ensure_data_dirs() -> AppPaths:
     paths.uploads_dir.mkdir(parents=True, exist_ok=True)
     paths.agy_workdir.mkdir(parents=True, exist_ok=True)
     paths.crops_dir.mkdir(parents=True, exist_ok=True)
+    paths.speech_dir.mkdir(parents=True, exist_ok=True)
     return paths
 
 

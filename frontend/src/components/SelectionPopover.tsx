@@ -1,4 +1,4 @@
-import { Highlighter, Languages, MessageSquarePlus, ScanText, Sparkles, X } from 'lucide-react';
+import { Highlighter, Languages, MessageSquarePlus, PlayCircle, ScanText, Sparkles, Volume2, X } from 'lucide-react';
 import type { HighlightColor, PendingSelection } from '../types';
 
 export const HIGHLIGHT_COLORS: { id: HighlightColor; label: string; dot: string }[] = [
@@ -9,24 +9,40 @@ export const HIGHLIGHT_COLORS: { id: HighlightColor; label: string; dot: string 
   { id: 'violet', label: '丁香紫', dot: 'bg-violet-400' },
 ];
 
+export type SelectionPopoverAction =
+  | 'highlight'
+  | 'note'
+  | 'ask'
+  | 'translate'
+  | 'ocr'
+  | 'pronounce'
+  | 'read_from_here';
+
 interface SelectionPopoverProps {
   selection: PendingSelection;
   selectedColor: HighlightColor;
+  hasSpeechScript?: boolean;
   onChangeColor: (c: HighlightColor) => void;
-  onAction: (mode: 'highlight' | 'note' | 'ask' | 'translate' | 'ocr') => void;
+  onAction: (mode: SelectionPopoverAction) => void;
   onClose: () => void;
 }
 
 export function SelectionPopover({
   selection,
   selectedColor,
+  hasSpeechScript = false,
   onChangeColor,
   onAction,
   onClose,
 }: SelectionPopoverProps) {
   const isCompact = typeof window !== 'undefined' && window.innerWidth < 768;
-  const left = Math.max(16, Math.min(window.innerWidth - 430, selection.clientX - 195));
-  const top = Math.max(64, Math.min(window.innerHeight - 110, selection.clientY - 62));
+  const hasText = selection.quoteText.trim().length > 0;
+  const desktopWidthEstimate = hasText ? 590 : 450;
+  const left = Math.max(
+    16,
+    Math.min(window.innerWidth - desktopWidthEstimate, selection.clientX - Math.round(desktopWidthEstimate / 2)),
+  );
+  const top = Math.max(64, Math.min(window.innerHeight - 130, selection.clientY - 64));
 
   return (
     <div
@@ -34,7 +50,7 @@ export function SelectionPopover({
       className={
         isCompact
           ? 'fixed bottom-16 left-2 right-2 mx-auto max-w-md z-50 bg-[#1C1B18] text-white rounded-2xl shadow-2xl border border-white/15 px-3 py-2.5 flex flex-wrap items-center justify-between gap-2'
-          : 'fixed z-50 bg-[#1C1B18] text-white rounded-xl shadow-2xl border border-white/10 px-2.5 py-2 flex items-center gap-2 animate-in fade-in duration-100'
+          : 'fixed z-50 max-w-[calc(100vw-32px)] bg-[#1C1B18] text-white rounded-xl shadow-2xl border border-white/10 px-2.5 py-2 flex flex-wrap items-center gap-1.5 animate-in fade-in duration-100'
       }
       onMouseDown={(e) => e.stopPropagation()}
       onTouchStart={(e) => e.stopPropagation()}
@@ -92,6 +108,30 @@ export function SelectionPopover({
         <Languages className="w-3.5 h-3.5 text-sky-300" />
         <span>翻译解释</span>
       </button>
+
+      {hasText && (
+        <>
+          <button
+            type="button"
+            onClick={() => onAction('pronounce')}
+            className="inline-flex items-center gap-1 px-2.5 py-1.5 sm:py-1 rounded-lg hover:bg-white/15 text-xs font-medium cursor-pointer"
+            title="使用 agy 生成自然发音文本并朗读选中内容"
+          >
+            <Volume2 className="w-3.5 h-3.5 text-teal-300" />
+            <span>发音</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onAction('read_from_here')}
+            className="inline-flex items-center gap-1 px-2.5 py-1.5 sm:py-1 rounded-lg hover:bg-white/15 text-xs font-medium cursor-pointer"
+            title={hasSpeechScript ? '快速跳转到全文朗读对应位置并播放' : '生成全文自然朗读文本并从此处开始播放'}
+          >
+            <PlayCircle className="w-3.5 h-3.5 text-orange-300" />
+            <span>从此处朗读</span>
+          </button>
+        </>
+      )}
 
       <button
         type="button"

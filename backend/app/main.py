@@ -12,7 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from app.config import FRONTEND_DIST_DIR, ensure_data_dirs
 from app.db import init_study_db
 from app.rag.store import rag_store
-from app.routers import chat, highlights, notebooks, rag, sources, system
+from app.routers import chat, highlights, notebooks, rag, sources, speech, system
 from app.services.agy_service import agy_service
 from app.services.study_service import get_settings
 
@@ -58,6 +58,7 @@ app.include_router(sources.router)
 app.include_router(highlights.router)
 app.include_router(chat.router)
 app.include_router(rag.router)
+app.include_router(speech.router)
 
 if FRONTEND_DIST_DIR.exists():
     assets_dir = FRONTEND_DIST_DIR / "assets"

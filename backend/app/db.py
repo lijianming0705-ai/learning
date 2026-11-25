@@ -104,6 +104,20 @@ CREATE TABLE IF NOT EXISTS messages (
 );
 CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id, created_at);
 
+CREATE TABLE IF NOT EXISTS source_speech_segments (
+    id TEXT PRIMARY KEY,
+    source_id TEXT NOT NULL REFERENCES sources(id) ON DELETE CASCADE,
+    segment_index INTEGER NOT NULL,
+    page_number INTEGER NOT NULL DEFAULT 1,
+    heading TEXT NOT NULL DEFAULT '',
+    original_excerpt TEXT NOT NULL DEFAULT '',
+    spoken_text TEXT NOT NULL,
+    language TEXT NOT NULL DEFAULT 'zh-CN',
+    audio_path TEXT,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_speech_source ON source_speech_segments(source_id, segment_index);
+
 CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
