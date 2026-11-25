@@ -55,6 +55,8 @@ class SourceSummary(BaseModel):
     word_count: int = 0
     highlight_count: int = 0
     is_scanned: bool = False
+    last_page: int = 1
+    last_scroll_ratio: float = 0.0
     status: str = "ready"
     error_message: str | None = None
     created_at: str
@@ -64,6 +66,8 @@ class SourceSummary(BaseModel):
 class SourceUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=300)
     category: str | None = Field(default=None, max_length=60)
+    last_page: int | None = Field(default=None, ge=1)
+    last_scroll_ratio: float | None = Field(default=None, ge=0.0, le=1.0)
 
 
 class ClassifySourcesRequest(BaseModel):

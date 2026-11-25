@@ -324,13 +324,35 @@ def update_source(source_id: str, payload: SourceUpdate) -> SourceDetail | None:
         return None
     new_title = payload.title.strip() if payload.title is not None else existing.title
     new_category = payload.category.strip() if payload.category is not None else existing.category
+    new_last_page = payload.last_page if payload.last_page is not None else existing.last_page
+    new_last_scroll = (
+        float(payload.last_scroll_ratio)
+        if payload.last_scroll_ratio is not None
+        else existing.last_scroll_ratio
+    )
+    meta_changed = (
+        (payload.title is not None and new_title != existing.title)
+        or (payload.category is not None and new_category != existing.category)
+    )
     now = utc_now_iso()
     with get_db() as conn:
         conn.execute(
-            "UPDATE sources SET title = ?, category = ?, updated_at = ? WHERE id = ?",
-            (new_title, new_category, now, source_id),
+            """
+            UPDATE sources
+            SET title = ?, category = ?, last_page = ?, last_scroll_ratio = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (
+                new_title,
+                new_category,
+                new_last_page,
+                new_last_scroll,
+                now if meta_changed else existing.updated_at,
+                source_id,
+            ),
         )
-        conn.execute("UPDATE notebooks SET updated_at = ? WHERE id = ?", (now, existing.notebook_id))
+        if meta_changed:
+            conn.execute("UPDATE notebooks SET updated_at = ? WHERE id = ?", (now, existing.notebook_id))
     if payload.title is not None and new_title != existing.title:
         rag_store.update_source_title(source_id, new_title)
     return get_source_detail(source_id)
@@ -407,6 +429,8 @@ def _row_to_source_summary(row: sqlite3.Row) -> SourceSummary:
         word_count=int(row["word_count"]),
         highlight_count=int(row["highlight_count"]),
         is_scanned=bool(row["is_scanned"]) if "is_scanned" in row.keys() else False,
+        last_page=int(row["last_page"]) if "last_page" in row.keys() and row["last_page"] else 1,
+        last_scroll_ratio=float(row["last_scroll_ratio"]) if "last_scroll_ratio" in row.keys() and row["last_scroll_ratio"] is not None else 0.0,
         status=row["status"],
         error_message=row["error_message"],
         created_at=row["created_at"],

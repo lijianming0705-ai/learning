@@ -11,6 +11,8 @@ interface DocumentViewerProps {
   expandedReading?: boolean;
   fullWidthReading?: boolean;
   einkMode?: boolean;
+  suppressAutoRestore?: boolean;
+  onSaveReadingPosition?: (sourceId: string, page: number, scrollRatio: number) => void;
   onSelectHighlight: (highlightId: string) => void;
   onTextSelected: (sel: PendingSelection) => void;
 }
@@ -23,13 +25,20 @@ export function DocumentViewer({
   expandedReading = false,
   fullWidthReading = false,
   einkMode = false,
+  suppressAutoRestore = false,
+  onSaveReadingPosition,
   onSelectHighlight,
   onTextSelected,
 }: DocumentViewerProps) {
   const articleRef = useRef<HTMLDivElement | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const [docZoom, setDocZoom] = useState(1);
+  const [restoredNotice, setRestoredNotice] = useState<string | null>(null);
   const lastSelKeyRef = useRef('');
+  const restoredSourceRef = useRef<string | null>(null);
+  const saveTimerRef = useRef<number | null>(null);
+  const onSavePosRef = useRef(onSaveReadingPosition);
+  onSavePosRef.current = onSaveReadingPosition;
 
   usePinchZoom({
     containerRef: scrollContainerRef,
@@ -128,6 +137,69 @@ export function DocumentViewer({
       mark.scrollIntoView({ behavior: einkMode ? 'auto' : 'smooth', block: 'center' });
     }
   }, [pulseHighlightId, activeHighlightId, einkMode]);
+
+  // Auto-restore last scroll position when opening a document
+  useEffect(() => {
+    restoredSourceRef.current = null;
+    setRestoredNotice(null);
+    if (suppressAutoRestore || activeHighlightId || pulseHighlightId) {
+      restoredSourceRef.current = source.id;
+      return;
+    }
+
+    let savedRatio = source.last_scroll_ratio || 0;
+    try {
+      const raw = localStorage.getItem(`inkmind.readPos.${source.id}`);
+      if (raw) {
+        const parsed = JSON.parse(raw) as { scrollRatio?: number };
+        if (typeof parsed.scrollRatio === 'number') {
+          savedRatio = parsed.scrollRatio;
+        }
+      }
+    } catch {
+      // ignore storage errors
+    }
+
+    const ratio = Math.max(0, Math.min(1, savedRatio));
+    if (ratio >= 0.02) {
+      setRestoredNotice(`已恢复上次阅读进度 · ${Math.round(ratio * 100)}%`);
+      const hideTimer = window.setTimeout(() => setRestoredNotice(null), 2600);
+      requestAnimationFrame(() => {
+        window.setTimeout(() => {
+          const container = scrollContainerRef.current;
+          if (container) {
+            const maxScroll = Math.max(0, container.scrollHeight - container.clientHeight);
+            container.scrollTo({ top: ratio * maxScroll, behavior: 'instant' });
+          }
+          restoredSourceRef.current = source.id;
+        }, 60);
+      });
+      return () => window.clearTimeout(hideTimer);
+    }
+
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTo({ top: 0, behavior: 'instant' });
+    }
+    restoredSourceRef.current = source.id;
+  }, [source.id, source.last_scroll_ratio, renderedHtml, suppressAutoRestore, activeHighlightId, pulseHighlightId]);
+
+  const handleDocumentScroll = () => {
+    if (restoredSourceRef.current !== source.id) return;
+    if (saveTimerRef.current !== null) window.clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = window.setTimeout(() => {
+      const container = scrollContainerRef.current;
+      if (!container) return;
+      const maxScroll = Math.max(1, container.scrollHeight - container.clientHeight);
+      const ratio = Math.max(0, Math.min(1, container.scrollTop / maxScroll));
+      onSavePosRef.current?.(source.id, 1, ratio);
+    }, 500);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (saveTimerRef.current !== null) window.clearTimeout(saveTimerRef.current);
+    };
+  }, []);
 
   const emitSelectionFromDom = useCallback(() => {
     const sel = window.getSelection();
@@ -231,7 +303,16 @@ export function DocumentViewer({
 
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-[#F8F6F1]">
-      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-2.5 sm:px-4 py-3 sm:py-5">
+      {restoredNotice && (
+        <div className="shrink-0 bg-[#1C1B18] text-white px-3 py-1 text-[11px] flex items-center justify-center">
+          <span>{restoredNotice}</span>
+        </div>
+      )}
+      <div
+        ref={scrollContainerRef}
+        onScroll={handleDocumentScroll}
+        className="flex-1 overflow-y-auto px-2.5 sm:px-4 py-3 sm:py-5"
+      >
         <div
           className={`w-full mx-auto bg-white border border-[#E5E0D5] rounded-2xl shadow-xs ${cardPaddingClass} py-5 sm:py-7 eink-surface`}
         >

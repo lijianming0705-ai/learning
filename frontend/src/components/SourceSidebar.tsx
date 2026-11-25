@@ -377,6 +377,8 @@ export function SourceSidebar({
           </div>
           <span className="shrink-0">
             {src.type === 'pdf' ? `${src.page_count} 页` : `${src.word_count} 字`}
+            {src.type === 'pdf' && src.last_page > 1 ? ` · P.${src.last_page}` : ''}
+            {src.type !== 'pdf' && src.last_scroll_ratio >= 0.05 ? ` · ${Math.round(src.last_scroll_ratio * 100)}%` : ''}
             {src.highlight_count > 0 ? ` · ${src.highlight_count} 划线` : ''}
           </span>
         </div>

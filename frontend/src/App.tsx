@@ -61,6 +61,7 @@ export default function App() {
   const [activeHighlightId, setActiveHighlightId] = useState<string | null>(null);
   const [pulseHighlightId, setPulseHighlightId] = useState<string | null>(null);
   const [jumpPage, setJumpPage] = useState<{ page: number; seq: number } | null>(null);
+  const [suppressAutoRestore, setSuppressAutoRestore] = useState(false);
 
   const [pendingSelection, setPendingSelection] = useState<PendingSelection | null>(null);
   const [selectionColor, setSelectionColor] = useState<HighlightColor>('amber');
@@ -223,7 +224,17 @@ export default function App() {
     setActiveConvId(null);
     setChatMessages([]);
 
-    const chosenSourceId = targetSourceId || srcList[0]?.id || null;
+    let rememberedSourceId: string | null = null;
+    try {
+      const savedSid = localStorage.getItem(`inkmind.lastSource.${nb.id}`);
+      if (savedSid && srcList.some((s) => s.id === savedSid)) {
+        rememberedSourceId = savedSid;
+      }
+    } catch {
+      // ignore storage errors
+    }
+
+    const chosenSourceId = targetSourceId || rememberedSourceId || srcList[0]?.id || null;
     if (chosenSourceId) {
       await loadSource(chosenSourceId, targetHighlightId || undefined, targetPage || undefined);
     } else {
@@ -233,10 +244,16 @@ export default function App() {
   };
 
   const loadSource = async (sourceId: string, targetHighlightId?: string, targetPage?: number) => {
+    setSuppressAutoRestore(Boolean(targetHighlightId || targetPage));
     const [detail, hls] = await Promise.all([
       api.getSource(sourceId),
       api.listSourceHighlights(sourceId),
     ]);
+    try {
+      localStorage.setItem(`inkmind.lastSource.${detail.notebook_id}`, detail.id);
+    } catch {
+      // ignore storage errors
+    }
     setActiveSource(detail);
     setHighlights(hls);
     setPendingSelection(null);
@@ -248,7 +265,33 @@ export default function App() {
     }
     if (targetPage) {
       setJumpPage({ page: targetPage, seq: Date.now() });
+    } else {
+      setJumpPage(null);
     }
+  };
+
+  const handleSaveReadingPosition = (sourceId: string, lastPage: number, lastScrollRatio: number) => {
+    const cleanPage = Math.max(1, Math.round(lastPage));
+    const cleanRatio = Math.max(0, Math.min(1, Number(lastScrollRatio.toFixed(4))));
+    try {
+      localStorage.setItem(
+        `inkmind.readPos.${sourceId}`,
+        JSON.stringify({ page: cleanPage, scrollRatio: cleanRatio, ts: Date.now() }),
+      );
+    } catch {
+      // ignore storage errors
+    }
+    setSources((prev) =>
+      prev.map((s) =>
+        s.id === sourceId ? { ...s, last_page: cleanPage, last_scroll_ratio: cleanRatio } : s,
+      ),
+    );
+    setActiveSource((prev) =>
+      prev && prev.id === sourceId
+        ? { ...prev, last_page: cleanPage, last_scroll_ratio: cleanRatio }
+        : prev,
+    );
+    api.updateSource(sourceId, { last_page: cleanPage, last_scroll_ratio: cleanRatio }).catch(() => {});
   };
 
   const handleCreateNotebook = async (payload: { title: string; description: string; color: string }) => {
@@ -729,6 +772,8 @@ export default function App() {
                   pulseHighlightId={pulseHighlightId}
                   jumpPage={jumpPage}
                   einkMode={einkMode}
+                  suppressAutoRestore={suppressAutoRestore}
+                  onSaveReadingPosition={handleSaveReadingPosition}
                   onSelectHighlight={(hlId) => {
                     setActiveHighlightId(hlId);
                     setRightTab('remarks');
@@ -746,6 +791,8 @@ export default function App() {
                   expandedReading={leftCollapsed || rightCollapsed}
                   fullWidthReading={leftCollapsed && rightCollapsed}
                   einkMode={einkMode}
+                  suppressAutoRestore={suppressAutoRestore}
+                  onSaveReadingPosition={handleSaveReadingPosition}
                   onSelectHighlight={(hlId) => {
                     setActiveHighlightId(hlId);
                     setRightTab('remarks');

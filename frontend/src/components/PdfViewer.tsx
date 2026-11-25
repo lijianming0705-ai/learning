@@ -26,6 +26,8 @@ interface PdfViewerProps {
   pulseHighlightId: string | null;
   jumpPage: { page: number; seq: number } | null;
   einkMode?: boolean;
+  suppressAutoRestore?: boolean;
+  onSaveReadingPosition?: (sourceId: string, page: number, scrollRatio: number) => void;
   onSelectHighlight: (highlightId: string) => void;
   onSelectionMade: (sel: PendingSelection) => void;
 }
@@ -410,6 +412,8 @@ export function PdfViewer({
   pulseHighlightId,
   jumpPage,
   einkMode = false,
+  suppressAutoRestore = false,
+  onSaveReadingPosition,
   onSelectHighlight,
   onSelectionMade,
 }: PdfViewerProps) {
@@ -424,6 +428,7 @@ export function PdfViewer({
   const [paginatedMode, setPaginatedMode] = useState(einkMode);
   const [fitWidthMode, setFitWidthMode] = useState(true);
   const [dismissedScanHint, setDismissedScanHint] = useState(false);
+  const [restoredNotice, setRestoredNotice] = useState<string | null>(null);
 
   const pageRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
@@ -431,6 +436,10 @@ export function PdfViewer({
   displayScaleRef.current = displayScale;
   const swipeStartRef = useRef<{ x: number; y: number } | null>(null);
   const lastObservedWidthRef = useRef<number>(0);
+  const restoredSourceRef = useRef<string | null>(null);
+  const saveTimerRef = useRef<number | null>(null);
+  const onSavePosRef = useRef(onSaveReadingPosition);
+  onSavePosRef.current = onSaveReadingPosition;
 
   useEffect(() => {
     setPaginatedMode(einkMode);
@@ -480,6 +489,8 @@ export function PdfViewer({
   useEffect(() => {
     let cancelled = false;
     let loadedDoc: pdfjsLib.PDFDocumentProxy | null = null;
+    restoredSourceRef.current = null;
+    setRestoredNotice(null);
     setLoading(true);
     setErrorMsg(null);
     setCurrentPage(1);
@@ -575,6 +586,91 @@ export function PdfViewer({
     if (!jumpPage) return;
     goToPage(jumpPage.page);
   }, [jumpPage, goToPage]);
+
+  // Restore last reading position once pdfDoc for this source finishes loading
+  useEffect(() => {
+    if (!pdfDoc || loading) return;
+    if (restoredSourceRef.current === source.id) return;
+
+    if (suppressAutoRestore || jumpPage) {
+      restoredSourceRef.current = source.id;
+      return;
+    }
+
+    let savedPage = source.last_page || 1;
+    let savedRatio = source.last_scroll_ratio || 0;
+    try {
+      const raw = localStorage.getItem(`inkmind.readPos.${source.id}`);
+      if (raw) {
+        const parsed = JSON.parse(raw) as { page?: number; scrollRatio?: number };
+        if (typeof parsed.page === 'number' && parsed.page >= 1) {
+          savedPage = parsed.page;
+        }
+        if (typeof parsed.scrollRatio === 'number' && parsed.scrollRatio >= 0) {
+          savedRatio = parsed.scrollRatio;
+        }
+      }
+    } catch {
+      // ignore storage errors
+    }
+
+    const targetPage = Math.max(1, Math.min(pdfDoc.numPages, savedPage));
+    const targetRatio = Math.max(0, Math.min(1, savedRatio));
+
+    if (targetPage > 1 || targetRatio > 0.02) {
+      setCurrentPage(targetPage);
+      setRestoredNotice(`已恢复上次阅读位置 · 第 ${targetPage} 页`);
+      const hideTimer = window.setTimeout(() => setRestoredNotice(null), 2600);
+
+      if (!paginatedMode) {
+        requestAnimationFrame(() => {
+          window.setTimeout(() => {
+            const container = scrollContainerRef.current;
+            if (targetPage > 1 && pageRefs.current[targetPage]) {
+              pageRefs.current[targetPage]?.scrollIntoView({ behavior: 'instant', block: 'start' });
+            } else if (container && targetRatio > 0.02) {
+              const maxScroll = Math.max(0, container.scrollHeight - container.clientHeight);
+              container.scrollTop = targetRatio * maxScroll;
+            }
+            restoredSourceRef.current = source.id;
+          }, 80);
+        });
+      } else {
+        restoredSourceRef.current = source.id;
+      }
+
+      return () => window.clearTimeout(hideTimer);
+    }
+
+    restoredSourceRef.current = source.id;
+  }, [pdfDoc, loading, source.id, source.last_page, source.last_scroll_ratio, suppressAutoRestore, jumpPage, paginatedMode]);
+
+  // Persist reading position when page changes or container scrolls
+  const scheduleSavePosition = useCallback(
+    (page: number) => {
+      if (restoredSourceRef.current !== source.id) return;
+      if (saveTimerRef.current !== null) window.clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = window.setTimeout(() => {
+        const container = scrollContainerRef.current;
+        const maxScroll = container ? Math.max(1, container.scrollHeight - container.clientHeight) : 1;
+        const ratio = container ? Math.max(0, Math.min(1, container.scrollTop / maxScroll)) : 0;
+        onSavePosRef.current?.(source.id, page, ratio);
+      }, 450);
+    },
+    [source.id],
+  );
+
+  useEffect(() => {
+    if (restoredSourceRef.current === source.id) {
+      scheduleSavePosition(currentPage);
+    }
+  }, [currentPage, source.id, scheduleSavePosition]);
+
+  useEffect(() => {
+    return () => {
+      if (saveTimerRef.current !== null) window.clearTimeout(saveTimerRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     if (!paginatedMode) return;
@@ -758,9 +854,17 @@ export function PdfViewer({
         </div>
       )}
 
+      {/* Restored Reading Position Pill */}
+      {restoredNotice && (
+        <div className="shrink-0 bg-[#1C1B18] text-white px-3 py-1 text-[11px] flex items-center justify-center">
+          <span>{restoredNotice}</span>
+        </div>
+      )}
+
       {/* Pages Scroll Area */}
       <div
         ref={scrollContainerRef}
+        onScroll={() => scheduleSavePosition(currentPage)}
         onTouchStart={handleSwipeTouchStart}
         onTouchEnd={handleSwipeTouchEnd}
         className="flex-1 overflow-auto px-2 sm:px-4 py-4 sm:py-6"

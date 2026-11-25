@@ -32,6 +32,8 @@ export interface SourceSummary {
   word_count: number;
   highlight_count: number;
   is_scanned: boolean;
+  last_page: number;
+  last_scroll_ratio: number;
   status: string;
   error_message: string | null;
   created_at: string;

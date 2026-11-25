@@ -73,7 +73,10 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ url, title: title || null }),
     }),
-  updateSource: (sourceId: string, payload: { title?: string; category?: string }) =>
+  updateSource: (
+    sourceId: string,
+    payload: { title?: string; category?: string; last_page?: number; last_scroll_ratio?: number },
+  ) =>
     requestJson<SourceDetail>(`/api/sources/${sourceId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },

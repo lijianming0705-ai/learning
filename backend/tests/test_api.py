@@ -120,13 +120,18 @@ def test_full_study_workflow_and_rag_persistence(test_client, tmp_path: Path) ->
     chat_sse = _parse_sse_events(chat_resp.text)
     assert any(name == "done" for name, _ in chat_sse)
 
-    # 9. Source rename + AI one-click classification
+    # 9. Source rename + reading position persistence + AI one-click classification
     ren_resp = test_client.patch(
         f"/api/sources/{source_id}",
-        json={"title": "Attention Is All You Need (精读版)"},
+        json={"title": "Attention Is All You Need (精读版)", "last_page": 1, "last_scroll_ratio": 0.42},
     )
     assert ren_resp.status_code == 200
     assert ren_resp.json()["title"] == "Attention Is All You Need (精读版)"
+    assert ren_resp.json()["last_page"] == 1
+    assert abs(ren_resp.json()["last_scroll_ratio"] - 0.42) < 1e-6
+    get_src_resp = test_client.get(f"/api/sources/{source_id}")
+    assert get_src_resp.status_code == 200
+    assert abs(get_src_resp.json()["last_scroll_ratio"] - 0.42) < 1e-6
     rag_renamed = test_client.get("/api/rag/search", params={"q": "注意力机制", "doc_type": "qa_memory"}).json()
     assert rag_renamed[0]["source_title"] == "Attention Is All You Need (精读版)"
 
