@@ -1,0 +1,30 @@
+[project]
+name = "inkmind-study-backend"
+version = "0.1.0"
+description = "Personal web study platform backend powered by antigravity-cli (agy) and hybrid RAG"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "python-multipart>=0.0.12",
+    "pymupdf>=1.24.10",
+    "mammoth>=1.8.0",
+    "httpx>=0.27.2",
+    "beautifulsoup4>=4.12.3",
+    "lxml>=5.3.0",
+    "readability-lxml>=0.8.1",
+    "numpy>=2.1.0",
+    "pydantic>=2.9.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.24.0",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
