@@ -1,4 +1,16 @@
-import { ArrowLeft, BookOpenText, Database, Settings, Sparkles } from 'lucide-react';
+import {
+  ArrowLeft,
+  BookOpenText,
+  Database,
+  Maximize2,
+  Minimize2,
+  PanelLeftClose,
+  PanelLeftOpen,
+  PanelRightClose,
+  PanelRightOpen,
+  Settings,
+  Sparkles,
+} from 'lucide-react';
 import type { AgyModel, HealthStatus, Notebook } from '../types';
 
 interface HeaderProps {
@@ -8,6 +20,11 @@ interface HeaderProps {
   selectedModel: string;
   onSelectModel: (modelId: string) => void;
   health: HealthStatus | null;
+  leftCollapsed?: boolean;
+  rightCollapsed?: boolean;
+  onToggleLeft?: () => void;
+  onToggleRight?: () => void;
+  onToggleFocusMode?: () => void;
   onOpenGlobalRag: () => void;
   onOpenSettings: () => void;
 }
@@ -19,9 +36,15 @@ export function Header({
   selectedModel,
   onSelectModel,
   health,
+  leftCollapsed = false,
+  rightCollapsed = false,
+  onToggleLeft,
+  onToggleRight,
+  onToggleFocusMode,
   onOpenGlobalRag,
   onOpenSettings,
 }: HeaderProps) {
+  const isFocusMode = leftCollapsed && rightCollapsed;
   return (
     <header className="h-14 shrink-0 border-b border-[#E5E0D5] bg-white/90 backdrop-blur px-4 flex items-center justify-between gap-3 z-20">
       <div className="flex items-center gap-3 min-w-0">
@@ -51,6 +74,50 @@ export function Header({
       </div>
 
       <div className="flex items-center gap-2.5">
+        {activeNotebook && (
+          <div className="flex items-center rounded-lg border border-[#E5E0D5] bg-[#FAF8F4] p-0.5">
+            <button
+              type="button"
+              onClick={onToggleLeft}
+              title={leftCollapsed ? '展开左侧素材栏 (⌘[)' : '收起左侧素材栏 (⌘[)'}
+              className={`p-1.5 rounded-md transition cursor-pointer ${
+                leftCollapsed
+                  ? 'text-[#B45309] bg-white shadow-xs'
+                  : 'text-[#5E5B53] hover:text-[#1C1B18] hover:bg-[#EFECE5]'
+              }`}
+            >
+              {leftCollapsed ? <PanelLeftOpen className="w-3.5 h-3.5" /> : <PanelLeftClose className="w-3.5 h-3.5" />}
+            </button>
+
+            <button
+              type="button"
+              onClick={onToggleFocusMode}
+              title={isFocusMode ? '恢复左右分栏' : '收起两侧，专注阅读'}
+              className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium transition cursor-pointer ${
+                isFocusMode
+                  ? 'bg-[#B45309] text-white shadow-xs'
+                  : 'text-[#5E5B53] hover:text-[#1C1B18] hover:bg-[#EFECE5]'
+              }`}
+            >
+              {isFocusMode ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+              <span className="hidden lg:inline">{isFocusMode ? '恢复分栏' : '专注阅读'}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={onToggleRight}
+              title={rightCollapsed ? '展开右侧笔记栏 (⌘])' : '收起右侧笔记栏 (⌘])'}
+              className={`p-1.5 rounded-md transition cursor-pointer ${
+                rightCollapsed
+                  ? 'text-[#B45309] bg-white shadow-xs'
+                  : 'text-[#5E5B53] hover:text-[#1C1B18] hover:bg-[#EFECE5]'
+              }`}
+            >
+              {rightCollapsed ? <PanelRightOpen className="w-3.5 h-3.5" /> : <PanelRightClose className="w-3.5 h-3.5" />}
+            </button>
+          </div>
+        )}
+
         <button
           onClick={onOpenGlobalRag}
           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#E5E0D5] bg-[#FAF8F4] hover:bg-[#EFECE5] text-xs font-medium text-[#1C1B18] transition cursor-pointer"

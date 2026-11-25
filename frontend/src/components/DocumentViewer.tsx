@@ -7,6 +7,8 @@ interface DocumentViewerProps {
   highlights: Highlight[];
   activeHighlightId: string | null;
   pulseHighlightId: string | null;
+  expandedReading?: boolean;
+  fullWidthReading?: boolean;
   onSelectHighlight: (highlightId: string) => void;
   onTextSelected: (sel: PendingSelection) => void;
 }
@@ -16,6 +18,8 @@ export function DocumentViewer({
   highlights,
   activeHighlightId,
   pulseHighlightId,
+  expandedReading = false,
+  fullWidthReading = false,
   onSelectHighlight,
   onTextSelected,
 }: DocumentViewerProps) {
@@ -144,9 +148,15 @@ export function DocumentViewer({
     });
   };
 
+  const containerWidthClass = fullWidthReading
+    ? 'max-w-5xl'
+    : expandedReading
+      ? 'max-w-4xl'
+      : 'max-w-3xl';
+
   return (
     <div className="flex-1 overflow-y-auto bg-[#F8F6F1] px-6 py-6">
-      <div className="max-w-3xl mx-auto bg-white border border-[#E5E0D5] rounded-2xl shadow-xs px-8 py-7">
+      <div className={`${containerWidthClass} mx-auto bg-white border border-[#E5E0D5] rounded-2xl shadow-xs px-8 py-7 transition-all duration-200`}>
         <div className="pb-4 mb-6 border-b border-[#EFECE5] flex items-start justify-between gap-4">
           <div>
             <div className="inline-flex items-center gap-1.5 text-xs text-[#5E5B53] mb-1">

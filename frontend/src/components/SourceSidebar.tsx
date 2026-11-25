@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { FileText, FileUp, Globe, Link2, Loader2, Trash2, UploadCloud } from 'lucide-react';
+import { FileText, FileUp, Globe, Link2, Loader2, PanelLeftClose, Trash2, UploadCloud } from 'lucide-react';
 import type { SourceSummary } from '../types';
 
 interface SourceSidebarProps {
@@ -9,6 +9,7 @@ interface SourceSidebarProps {
   onUploadFiles: (files: File[]) => Promise<void>;
   onImportUrl: (url: string) => Promise<void>;
   onDeleteSource: (sourceId: string) => Promise<void>;
+  onCollapse?: () => void;
 }
 
 export function SourceSidebar({
@@ -18,6 +19,7 @@ export function SourceSidebar({
   onUploadFiles,
   onImportUrl,
   onDeleteSource,
+  onCollapse,
 }: SourceSidebarProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -74,7 +76,19 @@ export function SourceSidebar({
       <div className="p-3 border-b border-[#E5E0D5] space-y-2.5">
         <div className="flex items-center justify-between">
           <span className="text-xs font-semibold uppercase tracking-wider text-[#5E5B53]">学习素材</span>
-          <span className="text-[11px] text-[#5E5B53]">{sources.length} 份</span>
+          <div className="flex items-center gap-1.5">
+            <span className="text-[11px] text-[#5E5B53]">{sources.length} 份</span>
+            {onCollapse && (
+              <button
+                type="button"
+                onClick={onCollapse}
+                title="收起左侧素材栏 (⌘[)"
+                className="p-1 rounded-md text-[#5E5B53] hover:text-[#1C1B18] hover:bg-[#EFECE5] cursor-pointer"
+              >
+                <PanelLeftClose className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Drag and Drop Upload Zone */}

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import * as pdfjsLib from 'pdfjs-dist';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import 'pdfjs-dist/web/pdf_viewer.css';
-import { BoxSelect, ChevronLeft, ChevronRight, Highlighter, Loader2, ZoomIn, ZoomOut } from 'lucide-react';
+import { BoxSelect, ChevronLeft, ChevronRight, Highlighter, Loader2, MoveHorizontal, ZoomIn, ZoomOut } from 'lucide-react';
 import type { Highlight, HighlightColor, HighlightRect, PendingSelection, SourceDetail } from '../types';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
@@ -344,10 +344,12 @@ export function PdfViewer({
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [scale, setScale] = useState(1.25);
+  const [basePageWidth, setBasePageWidth] = useState<number | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [areaMode, setAreaMode] = useState(false);
 
   const pageRefs = useRef<Record<number, HTMLDivElement | null>>({});
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -358,12 +360,20 @@ export function PdfViewer({
 
     const task = pdfjsLib.getDocument(`/api/sources/${source.id}/file`);
     task.promise
-      .then((doc) => {
+      .then(async (doc) => {
         if (cancelled) {
           doc.destroy();
           return;
         }
         loadedDoc = doc;
+        try {
+          const p1 = await doc.getPage(1);
+          if (!cancelled) {
+            setBasePageWidth(p1.getViewport({ scale: 1 }).width);
+          }
+        } catch {
+          // ignore
+        }
         setPdfDoc(doc);
         setLoading(false);
       })
@@ -392,6 +402,13 @@ export function PdfViewer({
     if (!jumpPage) return;
     scrollToPage(jumpPage.page);
   }, [jumpPage]);
+
+  const handleFitWidth = () => {
+    if (!scrollContainerRef.current || !basePageWidth) return;
+    const avail = Math.max(320, scrollContainerRef.current.clientWidth - 48);
+    const next = Math.max(0.7, Math.min(2.4, Number((avail / basePageWidth).toFixed(2))));
+    setScale(next);
+  };
 
   const numPages = pdfDoc?.numPages || source.page_count || 1;
 
@@ -467,12 +484,22 @@ export function PdfViewer({
             >
               <ZoomIn className="w-3.5 h-3.5" />
             </button>
+            <button
+              type="button"
+              onClick={handleFitWidth}
+              disabled={!basePageWidth}
+              className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-[#E5E0D5] bg-[#FAF8F4] hover:bg-[#EFECE5] text-[11px] font-medium text-[#1C1B18] cursor-pointer disabled:opacity-40 ml-1"
+              title="自适应当前阅读区宽度"
+            >
+              <MoveHorizontal className="w-3 h-3 text-[#B45309]" />
+              <span>适宽</span>
+            </button>
           </div>
         </div>
       </div>
 
       {/* Pages Scroll Area */}
-      <div className="flex-1 overflow-y-auto px-4 py-6">
+      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-4 py-6">
         {loading ? (
           <div className="flex items-center justify-center h-64 text-sm text-[#5E5B53] gap-2">
             <Loader2 className="w-5 h-5 animate-spin text-[#B45309]" />
