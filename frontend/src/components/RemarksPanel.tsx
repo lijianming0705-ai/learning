@@ -16,7 +16,7 @@ import {
 import type { AgyModel, Highlight, HighlightColor, RagMemoryRef } from '../types';
 import { HIGHLIGHT_COLORS } from './SelectionPopover';
 
-const QUICK_PROMPTS = ['通俗解释', '提炼核心要点', '举个实际例子', '结合历史笔记对比'];
+const QUICK_PROMPTS = ['翻译并解释', '通俗解释', '提炼核心要点', '举个实际例子', '结合历史笔记对比'];
 
 interface RemarksPanelProps {
   highlights: Highlight[];

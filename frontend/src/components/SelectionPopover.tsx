@@ -1,4 +1,4 @@
-import { Highlighter, MessageSquarePlus, Sparkles, X } from 'lucide-react';
+import { Highlighter, Languages, MessageSquarePlus, Sparkles, X } from 'lucide-react';
 import type { HighlightColor, PendingSelection } from '../types';
 
 export const HIGHLIGHT_COLORS: { id: HighlightColor; label: string; dot: string }[] = [
@@ -13,7 +13,7 @@ interface SelectionPopoverProps {
   selection: PendingSelection;
   selectedColor: HighlightColor;
   onChangeColor: (c: HighlightColor) => void;
-  onAction: (mode: 'highlight' | 'note' | 'ask') => void;
+  onAction: (mode: 'highlight' | 'note' | 'ask' | 'translate') => void;
   onClose: () => void;
 }
 
@@ -24,7 +24,7 @@ export function SelectionPopover({
   onAction,
   onClose,
 }: SelectionPopoverProps) {
-  const left = Math.max(16, Math.min(window.innerWidth - 340, selection.clientX - 150));
+  const left = Math.max(16, Math.min(window.innerWidth - 430, selection.clientX - 195));
   const top = Math.max(64, Math.min(window.innerHeight - 110, selection.clientY - 62));
 
   return (
@@ -63,6 +63,16 @@ export function SelectionPopover({
       >
         <MessageSquarePlus className="w-3.5 h-3.5 text-emerald-300" />
         <span>记笔记</span>
+      </button>
+
+      <button
+        type="button"
+        onClick={() => onAction('translate')}
+        className="inline-flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-white/15 text-xs font-medium cursor-pointer"
+        title="高亮并立即生成中文翻译、词汇与句式解析"
+      >
+        <Languages className="w-3.5 h-3.5 text-sky-300" />
+        <span>翻译解释</span>
       </button>
 
       <button

@@ -267,7 +267,10 @@ export default function App() {
     }
   };
 
-  const handleSelectionAction = async (mode: 'highlight' | 'note' | 'ask') => {
+  const QUICK_TRANSLATE_PROMPT =
+    '请将这段划线英文翻译成自然流畅的中文，并拆解解释其中的核心词汇、专业术语、固定搭配与句式结构。';
+
+  const handleSelectionAction = async (mode: 'highlight' | 'note' | 'ask' | 'translate') => {
     if (!pendingSelection || !activeSource) return;
     try {
       const created = await api.createHighlight(activeSource.id, {
@@ -287,7 +290,10 @@ export default function App() {
       setRightTab('remarks');
       setPendingSelection(null);
       window.getSelection()?.removeAllRanges();
-      if (mode !== 'highlight') {
+      if (mode === 'translate') {
+        setRightCollapsed(false);
+        void handleAskHighlight(created.id, QUICK_TRANSLATE_PROMPT, true, settings.cross_notebook_rag);
+      } else if (mode !== 'highlight') {
         setRightCollapsed(false);
         setFocusIntent({ highlightId: created.id, mode });
       }
