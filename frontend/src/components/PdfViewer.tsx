@@ -3,6 +3,7 @@ import * as pdfjsLib from 'pdfjs-dist';
 import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import 'pdfjs-dist/web/pdf_viewer.css';
 import { BoxSelect, ChevronLeft, ChevronRight, Highlighter, Loader2, MoveHorizontal, ZoomIn, ZoomOut } from 'lucide-react';
+import { usePinchZoom } from '../hooks/usePinchZoom';
 import type { Highlight, HighlightColor, HighlightRect, PendingSelection, SourceDetail } from '../types';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
@@ -343,13 +344,43 @@ export function PdfViewer({
   const [pdfDoc, setPdfDoc] = useState<pdfjsLib.PDFDocumentProxy | null>(null);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [scale, setScale] = useState(1.25);
+  const [renderScale, setRenderScale] = useState(1.25);
+  const [displayScale, setDisplayScale] = useState(1.25);
   const [basePageWidth, setBasePageWidth] = useState<number | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [areaMode, setAreaMode] = useState(false);
 
   const pageRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const displayScaleRef = useRef(displayScale);
+  displayScaleRef.current = displayScale;
+
+  const setZoomImmediate = (next: number) => {
+    const clamped = Math.max(0.6, Math.min(3.0, Number(next.toFixed(2))));
+    setDisplayScale(clamped);
+    setRenderScale(clamped);
+  };
+
+  usePinchZoom({
+    containerRef: scrollContainerRef,
+    minScale: 0.6,
+    maxScale: 3.0,
+    currentScale: displayScale,
+    onScaleChange: (next) => {
+      const container = scrollContainerRef.current;
+      const prev = displayScaleRef.current;
+      if (container && prev > 0) {
+        const ratio = next / prev;
+        container.scrollTop = container.scrollTop * ratio;
+      }
+      setDisplayScale(next);
+    },
+    onScaleCommit: (finalScale) => {
+      const rounded = Math.max(0.6, Math.min(3.0, Number(finalScale.toFixed(2))));
+      setDisplayScale(rounded);
+      setRenderScale(rounded);
+    },
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -406,10 +437,11 @@ export function PdfViewer({
   const handleFitWidth = () => {
     if (!scrollContainerRef.current || !basePageWidth) return;
     const avail = Math.max(320, scrollContainerRef.current.clientWidth - 48);
-    const next = Math.max(0.7, Math.min(2.4, Number((avail / basePageWidth).toFixed(2))));
-    setScale(next);
+    const next = Math.max(0.6, Math.min(3.0, Number((avail / basePageWidth).toFixed(2))));
+    setZoomImmediate(next);
   };
 
+  const previewScaleRatio = renderScale > 0 ? displayScale / renderScale : 1;
   const numPages = pdfDoc?.numPages || source.page_count || 1;
 
   return (
@@ -469,16 +501,21 @@ export function PdfViewer({
           <div className="flex items-center gap-1 border-l border-[#E5E0D5] pl-2">
             <button
               type="button"
-              onClick={() => setScale((s) => Math.max(0.7, Number((s - 0.15).toFixed(2))))}
+              onClick={() => setZoomImmediate(displayScale - 0.15)}
               className="p-1.5 rounded-lg hover:bg-[#EFECE5] text-[#5E5B53] cursor-pointer"
               title="缩小"
             >
               <ZoomOut className="w-3.5 h-3.5" />
             </button>
-            <span className="text-xs font-medium text-[#1C1B18] w-11 text-center">{Math.round(scale * 100)}%</span>
+            <span
+              className="text-xs font-medium text-[#1C1B18] w-11 text-center"
+              title="支持 MacBook 触控板双指捏合缩放"
+            >
+              {Math.round(displayScale * 100)}%
+            </span>
             <button
               type="button"
-              onClick={() => setScale((s) => Math.min(2.4, Number((s + 0.15).toFixed(2))))}
+              onClick={() => setZoomImmediate(displayScale + 0.15)}
               className="p-1.5 rounded-lg hover:bg-[#EFECE5] text-[#5E5B53] cursor-pointer"
               title="放大"
             >
@@ -499,7 +536,7 @@ export function PdfViewer({
       </div>
 
       {/* Pages Scroll Area */}
-      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-4 py-6">
+      <div ref={scrollContainerRef} className="flex-1 overflow-auto px-4 py-6">
         {loading ? (
           <div className="flex items-center justify-center h-64 text-sm text-[#5E5B53] gap-2">
             <Loader2 className="w-5 h-5 animate-spin text-[#B45309]" />
@@ -510,24 +547,32 @@ export function PdfViewer({
             {errorMsg}
           </div>
         ) : pdfDoc ? (
-          Array.from({ length: pdfDoc.numPages }, (_, idx) => idx + 1).map((pageNum) => (
-            <PdfPageCanvas
-              key={`${source.id}-${pageNum}`}
-              pdfDoc={pdfDoc}
-              pageNumber={pageNum}
-              scale={scale}
-              areaMode={areaMode}
-              highlights={highlights.filter((h) => h.page_number === pageNum)}
-              activeHighlightId={activeHighlightId}
-              pulseHighlightId={pulseHighlightId}
-              onVisible={setCurrentPage}
-              onSelectHighlight={onSelectHighlight}
-              onSelectionMade={onSelectionMade}
-              registerPageRef={(p, el) => {
-                pageRefs.current[p] = el;
-              }}
-            />
-          ))
+          <div
+            style={
+              Math.abs(previewScaleRatio - 1) > 0.002
+                ? { transform: `scale(${previewScaleRatio})`, transformOrigin: 'top center' }
+                : undefined
+            }
+          >
+            {Array.from({ length: pdfDoc.numPages }, (_, idx) => idx + 1).map((pageNum) => (
+              <PdfPageCanvas
+                key={`${source.id}-${pageNum}`}
+                pdfDoc={pdfDoc}
+                pageNumber={pageNum}
+                scale={renderScale}
+                areaMode={areaMode}
+                highlights={highlights.filter((h) => h.page_number === pageNum)}
+                activeHighlightId={activeHighlightId}
+                pulseHighlightId={pulseHighlightId}
+                onVisible={setCurrentPage}
+                onSelectHighlight={onSelectHighlight}
+                onSelectionMade={onSelectionMade}
+                registerPageRef={(p, el) => {
+                  pageRefs.current[p] = el;
+                }}
+              />
+            ))}
+          </div>
         ) : null}
       </div>
     </div>

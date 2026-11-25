@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef } from 'react';
-import { ExternalLink, FileText } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { ExternalLink, FileText, ZoomIn, ZoomOut } from 'lucide-react';
+import { usePinchZoom } from '../hooks/usePinchZoom';
 import type { Highlight, PendingSelection, SourceDetail } from '../types';
 
 interface DocumentViewerProps {
@@ -24,6 +25,21 @@ export function DocumentViewer({
   onTextSelected,
 }: DocumentViewerProps) {
   const articleRef = useRef<HTMLDivElement | null>(null);
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const [docZoom, setDocZoom] = useState(1);
+
+  usePinchZoom({
+    containerRef: scrollContainerRef,
+    minScale: 0.7,
+    maxScale: 2.2,
+    currentScale: docZoom,
+    onScaleChange: (next) => {
+      setDocZoom(next);
+    },
+    onScaleCommit: (finalScale) => {
+      setDocZoom(Number(finalScale.toFixed(2)));
+    },
+  });
 
   // Build sanitized DOM + inject <mark> anchors whenever content or highlights change
   const renderedHtml = useMemo(() => source.html_content || '', [source.html_content]);
@@ -155,7 +171,7 @@ export function DocumentViewer({
       : 'max-w-3xl';
 
   return (
-    <div className="flex-1 overflow-y-auto bg-[#F8F6F1] px-6 py-6">
+    <div ref={scrollContainerRef} className="flex-1 overflow-y-auto bg-[#F8F6F1] px-6 py-6">
       <div className={`${containerWidthClass} mx-auto bg-white border border-[#E5E0D5] rounded-2xl shadow-xs px-8 py-7 transition-all duration-200`}>
         <div className="pb-4 mb-6 border-b border-[#EFECE5] flex items-start justify-between gap-4">
           <div>
@@ -167,22 +183,53 @@ export function DocumentViewer({
             </div>
             <h1 className="text-xl font-bold text-[#1C1B18]">{source.title}</h1>
           </div>
-          {source.source_url && (
-            <a
-              href={source.source_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 text-xs text-[#B45309] hover:underline shrink-0 mt-1"
-            >
-              <span>原文链接</span>
-              <ExternalLink className="w-3.5 h-3.5" />
-            </a>
-          )}
+
+          <div className="flex items-center gap-2 shrink-0 mt-0.5">
+            <div className="inline-flex items-center gap-0.5 rounded-lg border border-[#E5E0D5] bg-[#FAF8F4] px-1 py-0.5 text-[11px]">
+              <button
+                type="button"
+                onClick={() => setDocZoom((z) => Math.max(0.7, Number((z - 0.1).toFixed(2))))}
+                className="p-1 rounded hover:bg-[#EFECE5] text-[#5E5B53] cursor-pointer"
+                title="缩小字号"
+              >
+                <ZoomOut className="w-3 h-3" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setDocZoom(1)}
+                className="px-1.5 py-0.5 font-medium text-[#1C1B18] hover:text-[#B45309] cursor-pointer"
+                title="支持触控板双指缩放，点击重置为 100%"
+              >
+                {Math.round(docZoom * 100)}%
+              </button>
+              <button
+                type="button"
+                onClick={() => setDocZoom((z) => Math.min(2.2, Number((z + 0.1).toFixed(2))))}
+                className="p-1 rounded hover:bg-[#EFECE5] text-[#5E5B53] cursor-pointer"
+                title="放大字号"
+              >
+                <ZoomIn className="w-3 h-3" />
+              </button>
+            </div>
+
+            {source.source_url && (
+              <a
+                href={source.source_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-xs text-[#B45309] hover:underline"
+              >
+                <span>原文链接</span>
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            )}
+          </div>
         </div>
 
         <div
           ref={articleRef}
           onMouseUp={handleMouseUp}
+          style={{ fontSize: `${Math.round(16 * docZoom * 10) / 10}px` }}
           className="study-prose select-text"
         />
       </div>
