@@ -16,6 +16,8 @@ export interface Notebook {
   source_count: number;
   highlight_count: number;
   qa_count: number;
+  total_reading_seconds: number;
+  avg_reading_progress: number;
   created_at: string;
   updated_at: string;
 }
@@ -34,6 +36,10 @@ export interface SourceSummary {
   is_scanned: boolean;
   last_page: number;
   last_scroll_ratio: number;
+  reading_seconds: number;
+  reading_progress: number;
+  last_read_at: string | null;
+  read_sessions_count: number;
   status: string;
   error_message: string | null;
   created_at: string;
@@ -199,4 +205,111 @@ export interface LocateSpeechResponse {
   segment_id: string;
   page_number: number;
   score: number;
+}
+
+export interface ReadingHeartbeatPayload {
+  session_id: string;
+  source_id: string;
+  delta_seconds: number;
+  current_page: number;
+  scroll_ratio: number;
+  progress: number;
+  local_date?: string;
+  local_hour?: number;
+}
+
+export interface ReadingHeartbeatResponse {
+  source_id: string;
+  session_id: string;
+  reading_seconds: number;
+  reading_progress: number;
+  last_read_at: string;
+  session_duration_seconds: number;
+}
+
+export interface ReadingSummaryMetrics {
+  total_reading_seconds: number;
+  today_reading_seconds: number;
+  avg_session_seconds: number;
+  longest_session_seconds: number;
+  total_sessions: number;
+  active_days: number;
+  current_streak_days: number;
+  total_sources: number;
+  completed_sources: number;
+  in_progress_sources: number;
+  unread_sources: number;
+  avg_progress: number;
+  total_highlights: number;
+  total_qa_turns: number;
+  highlights_per_hour: number;
+  qa_per_hour: number;
+}
+
+export interface DailyReadingPoint {
+  date: string;
+  reading_seconds: number;
+  sessions_count: number;
+  highlights_count: number;
+  qa_count: number;
+}
+
+export interface HourlyReadingPoint {
+  hour: number;
+  reading_seconds: number;
+  sessions_count: number;
+}
+
+export interface CategoryReadingStat {
+  label: string;
+  reading_seconds: number;
+  source_count: number;
+  avg_progress: number;
+  highlight_count: number;
+}
+
+export interface SourceReadingStat {
+  source_id: string;
+  notebook_id: string;
+  notebook_title: string;
+  title: string;
+  type: string;
+  category: string;
+  page_count: number;
+  word_count: number;
+  last_page: number;
+  reading_progress: number;
+  reading_seconds: number;
+  read_sessions_count: number;
+  highlight_count: number;
+  qa_count: number;
+  last_read_at: string | null;
+  estimated_remaining_seconds: number | null;
+}
+
+export interface ReadingBehaviorProfile {
+  reader_archetype: string;
+  peak_period_label: string;
+  focus_style: string;
+  engagement_style: string;
+  completion_rate: number;
+  insights: string[];
+}
+
+export interface ReadingAnalytics {
+  scope_notebook_id: string | null;
+  days: number;
+  summary: ReadingSummaryMetrics;
+  daily_trend: DailyReadingPoint[];
+  hourly_distribution: HourlyReadingPoint[];
+  category_breakdown: CategoryReadingStat[];
+  type_breakdown: CategoryReadingStat[];
+  source_stats: SourceReadingStat[];
+  behavior_profile: ReadingBehaviorProfile;
+}
+
+export interface ReadingAiReport {
+  report_markdown: string;
+  model: string;
+  generated_at: string;
 }

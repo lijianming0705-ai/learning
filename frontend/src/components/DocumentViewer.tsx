@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, ExternalLink, FileText, ZoomIn, ZoomOut } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Clock, ExternalLink, FileText, ZoomIn, ZoomOut } from 'lucide-react';
 import { usePinchZoom } from '../hooks/usePinchZoom';
 import type { Highlight, PendingSelection, SourceDetail } from '../types';
+import { formatShortDuration } from '../utils/formatDuration';
 
 interface DocumentViewerProps {
   source: SourceDetail;
@@ -12,6 +13,7 @@ interface DocumentViewerProps {
   fullWidthReading?: boolean;
   einkMode?: boolean;
   suppressAutoRestore?: boolean;
+  liveSessionSeconds?: number;
   onSaveReadingPosition?: (sourceId: string, page: number, scrollRatio: number) => void;
   onSelectHighlight: (highlightId: string) => void;
   onTextSelected: (sel: PendingSelection) => void;
@@ -26,6 +28,7 @@ export function DocumentViewer({
   fullWidthReading = false,
   einkMode = false,
   suppressAutoRestore = false,
+  liveSessionSeconds = 0,
   onSaveReadingPosition,
   onSelectHighlight,
   onTextSelected,
@@ -323,6 +326,12 @@ export function DocumentViewer({
                 <span>{source.type === 'docx' ? 'Word 文档' : source.type === 'url' ? '网页精读' : '文本文档'}</span>
                 <span>·</span>
                 <span>{source.word_count} 字</span>
+                <span>·</span>
+                <span className="inline-flex items-center gap-1 tabular-nums text-[#B45309] font-medium">
+                  <Clock className="w-3 h-3" />
+                  {Math.round((source.reading_progress || 0) * 100)}% ·{' '}
+                  {formatShortDuration((source.reading_seconds || 0) + liveSessionSeconds)}
+                </span>
               </div>
               <h1 className="text-lg sm:text-xl font-bold text-[#1C1B18] break-words">{source.title}</h1>
             </div>

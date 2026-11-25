@@ -240,6 +240,86 @@ def test_full_study_workflow_and_rag_persistence(test_client, tmp_path: Path) ->
     assert locate_seg1.status_code == 200
     assert locate_seg1.json()["segment_index"] == 0
 
+    # 9d. Reading progress, duration heartbeats & behavior analytics
+    from datetime import datetime
+
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    hb1 = test_client.post(
+        "/api/analytics/reading/heartbeat",
+        json={
+            "session_id": "sess-test-001",
+            "source_id": source_id,
+            "delta_seconds": 45,
+            "current_page": 1,
+            "scroll_ratio": 0.6,
+            "progress": 0.6,
+            "local_date": today_str,
+            "local_hour": 21,
+        },
+    )
+    assert hb1.status_code == 200
+    assert hb1.json()["reading_seconds"] == 45
+    assert abs(hb1.json()["reading_progress"] - 0.6) < 1e-4
+
+    # Same session updates duration; lower progress should NOT decrease monotonic progress
+    hb2 = test_client.post(
+        "/api/analytics/reading/heartbeat",
+        json={
+            "session_id": "sess-test-001",
+            "source_id": source_id,
+            "delta_seconds": 30,
+            "current_page": 1,
+            "scroll_ratio": 0.3,
+            "progress": 0.3,
+            "local_date": today_str,
+            "local_hour": 21,
+        },
+    )
+    assert hb2.status_code == 200
+    assert hb2.json()["reading_seconds"] == 75
+    assert hb2.json()["session_duration_seconds"] == 75
+    assert abs(hb2.json()["reading_progress"] - 0.6) < 1e-4
+
+    # New session updates read_sessions_count and notebook rollups
+    hb3 = test_client.post(
+        "/api/analytics/reading/heartbeat",
+        json={
+            "session_id": "sess-test-002",
+            "source_id": source_id,
+            "delta_seconds": 25,
+            "current_page": 1,
+            "scroll_ratio": 0.96,
+            "progress": 1.0,
+            "local_date": today_str,
+            "local_hour": 22,
+        },
+    )
+    assert hb3.status_code == 200
+    assert hb3.json()["reading_seconds"] == 100
+    assert abs(hb3.json()["reading_progress"] - 1.0) < 1e-4
+
+    nb_list = test_client.get("/api/notebooks").json()
+    target_nb = [n for n in nb_list if n["id"] == nb_id][0]
+    assert target_nb["total_reading_seconds"] == 100
+    assert target_nb["avg_reading_progress"] > 0.4
+
+    analytics_resp = test_client.get("/api/analytics/reading", params={"notebook_id": nb_id, "days": 30})
+    assert analytics_resp.status_code == 200
+    adata = analytics_resp.json()
+    assert adata["summary"]["total_reading_seconds"] == 100
+    assert adata["summary"]["today_reading_seconds"] == 100
+    assert adata["summary"]["current_streak_days"] >= 1
+    assert adata["summary"]["total_sessions"] == 2
+    assert adata["summary"]["completed_sources"] == 1
+    assert len(adata["hourly_distribution"]) == 24
+    assert len(adata["daily_trend"]) == 30
+    assert "晚间" in adata["behavior_profile"]["peak_period_label"]
+    assert len(adata["behavior_profile"]["insights"]) >= 2
+
+    ai_rep = test_client.post("/api/analytics/reading/ai-report", json={"notebook_id": nb_id, "days": 30})
+    assert ai_rep.status_code == 200
+    assert "阅读习惯与时间画像" in ai_rep.json()["report_markdown"]
+
     # 10. Reindex & stats
     stats_resp = test_client.get("/api/rag/stats")
     assert stats_resp.status_code == 200

@@ -7,6 +7,7 @@ import {
   BoxSelect,
   ChevronLeft,
   ChevronRight,
+  Clock,
   Highlighter,
   Loader2,
   MoveHorizontal,
@@ -16,6 +17,7 @@ import {
 } from 'lucide-react';
 import { usePinchZoom } from '../hooks/usePinchZoom';
 import type { Highlight, HighlightColor, HighlightRect, PendingSelection, SourceDetail } from '../types';
+import { formatShortDuration } from '../utils/formatDuration';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
 
@@ -27,6 +29,7 @@ interface PdfViewerProps {
   jumpPage: { page: number; seq: number } | null;
   einkMode?: boolean;
   suppressAutoRestore?: boolean;
+  liveSessionSeconds?: number;
   onSaveReadingPosition?: (sourceId: string, page: number, scrollRatio: number) => void;
   onSelectHighlight: (highlightId: string) => void;
   onSelectionMade: (sel: PendingSelection) => void;
@@ -413,6 +416,7 @@ export function PdfViewer({
   jumpPage,
   einkMode = false,
   suppressAutoRestore = false,
+  liveSessionSeconds = 0,
   onSaveReadingPosition,
   onSelectHighlight,
   onSelectionMade,
@@ -756,6 +760,15 @@ export function PdfViewer({
               <ChevronRight className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
             </button>
           </div>
+          <span
+            className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#FAF8F4] border border-[#E5E0D5] text-[11px] text-[#5E5B53] tabular-nums"
+            title="已记录的阅读进度与累计阅读时长"
+          >
+            <Clock className="w-3 h-3 text-[#B45309]" />
+            <span>{Math.round((source.reading_progress || 0) * 100)}%</span>
+            <span>·</span>
+            <span>{formatShortDuration((source.reading_seconds || 0) + liveSessionSeconds)}</span>
+          </span>
         </div>
 
         <div className="flex items-center gap-1.5 sm:gap-2">

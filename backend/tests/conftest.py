@@ -75,6 +75,17 @@ def test_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
                 },
                 ensure_ascii=False,
             )
+        elif thread_key.startswith("analytics:"):
+            answer = (
+                "### 1. 阅读习惯与时间画像\n"
+                "你在晚间专注度最高。\n\n"
+                "### 2. 学习深度与互动效率\n"
+                "保持了良好的划线与 AI 问答节奏。\n\n"
+                "### 3. 素材推进与瓶颈诊断\n"
+                "核心论文正在稳步推进。\n\n"
+                "### 4. 下一步可执行改进建议\n"
+                "1. 优先读完当前进度较高的资料。"
+            )
         else:
             answer = f"这是针对问题的精炼解析（模型 {model}）：注意力机制通过 Query、Key、Value 计算相关性权重。"
         yield ("delta", answer[:18])

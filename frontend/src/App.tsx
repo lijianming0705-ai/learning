@@ -25,11 +25,14 @@ import { NotebookChatPanel } from './components/NotebookChatPanel';
 import { NotebookGrid } from './components/NotebookGrid';
 import { PdfViewer } from './components/PdfViewer';
 import { RagExplorerPanel } from './components/RagExplorerPanel';
+import { ReadingAnalyticsModal } from './components/ReadingAnalyticsModal';
 import { RemarksPanel } from './components/RemarksPanel';
 import { SelectionPopover, type SelectionPopoverAction } from './components/SelectionPopover';
 import { SettingsModal } from './components/SettingsModal';
 import { SourceSidebar } from './components/SourceSidebar';
 import { SpeechPanel } from './components/SpeechPanel';
+import { useReadingTracker } from './hooks/useReadingTracker';
+import { computeReadingProgress } from './utils/formatDuration';
 import type {
   AgyModel,
   AppSettings,
@@ -113,6 +116,11 @@ export default function App() {
 
   const [showSettings, setShowSettings] = useState(false);
   const [showGlobalRag, setShowGlobalRag] = useState(false);
+  const [showAnalytics, setShowAnalytics] = useState(false);
+  const [activeReadingPos, setActiveReadingPos] = useState<{ page: number; scrollRatio: number }>({
+    page: 1,
+    scrollRatio: 0,
+  });
   const [toastError, setToastError] = useState<string | null>(null);
   const [leftCollapsed, setLeftCollapsed] = useState<boolean>(() => {
     try {
@@ -431,6 +439,37 @@ export default function App() {
     }
   };
 
+  const { liveSessionSeconds } = useReadingTracker({
+    source: activeSource,
+    currentPage: activeReadingPos.page,
+    scrollRatio: activeReadingPos.scrollRatio,
+    isAudioPlaying: isSpeaking || selectionAudioPlaying,
+    onStatsUpdated: (res) => {
+      setActiveSource((prev) =>
+        prev && prev.id === res.source_id
+          ? {
+              ...prev,
+              reading_seconds: res.reading_seconds,
+              reading_progress: res.reading_progress,
+              last_read_at: res.last_read_at,
+            }
+          : prev,
+      );
+      setSources((prev) =>
+        prev.map((s) =>
+          s.id === res.source_id
+            ? {
+                ...s,
+                reading_seconds: res.reading_seconds,
+                reading_progress: res.reading_progress,
+                last_read_at: res.last_read_at,
+              }
+            : s,
+        ),
+      );
+    },
+  });
+
   const openNotebook = async (nb: Notebook, targetSourceId?: string | null, targetHighlightId?: string | null, targetPage?: number | null) => {
     stopAllAudio();
     setSpeechSegments([]);
@@ -483,6 +522,10 @@ export default function App() {
       // ignore storage errors
     }
     setActiveSource(detail);
+    setActiveReadingPos({
+      page: targetPage || detail.last_page || 1,
+      scrollRatio: detail.last_scroll_ratio || 0,
+    });
     setHighlights(hls);
     setSpeechSegments(speechRes.segments || []);
     setPendingSelection(null);
@@ -502,6 +545,7 @@ export default function App() {
   const handleSaveReadingPosition = (sourceId: string, lastPage: number, lastScrollRatio: number) => {
     const cleanPage = Math.max(1, Math.round(lastPage));
     const cleanRatio = Math.max(0, Math.min(1, Number(lastScrollRatio.toFixed(4))));
+    setActiveReadingPos({ page: cleanPage, scrollRatio: cleanRatio });
     try {
       localStorage.setItem(
         `inkmind.readPos.${sourceId}`,
@@ -510,17 +554,48 @@ export default function App() {
     } catch {
       // ignore storage errors
     }
+    const targetSrc = (activeSource?.id === sourceId ? activeSource : null) || sources.find((s) => s.id === sourceId);
+    const computedProgress = targetSrc
+      ? Math.max(
+          targetSrc.reading_progress || 0,
+          computeReadingProgress(
+            targetSrc.type,
+            targetSrc.page_count,
+            cleanPage,
+            cleanRatio,
+            targetSrc.reading_seconds || 0,
+          ),
+        )
+      : 0;
     setSources((prev) =>
       prev.map((s) =>
-        s.id === sourceId ? { ...s, last_page: cleanPage, last_scroll_ratio: cleanRatio } : s,
+        s.id === sourceId
+          ? {
+              ...s,
+              last_page: cleanPage,
+              last_scroll_ratio: cleanRatio,
+              reading_progress: Math.max(s.reading_progress || 0, computedProgress),
+            }
+          : s,
       ),
     );
     setActiveSource((prev) =>
       prev && prev.id === sourceId
-        ? { ...prev, last_page: cleanPage, last_scroll_ratio: cleanRatio }
+        ? {
+            ...prev,
+            last_page: cleanPage,
+            last_scroll_ratio: cleanRatio,
+            reading_progress: Math.max(prev.reading_progress || 0, computedProgress),
+          }
         : prev,
     );
-    api.updateSource(sourceId, { last_page: cleanPage, last_scroll_ratio: cleanRatio }).catch(() => {});
+    api
+      .updateSource(sourceId, {
+        last_page: cleanPage,
+        last_scroll_ratio: cleanRatio,
+        reading_progress: computedProgress,
+      })
+      .catch(() => {});
   };
 
   const handleCreateNotebook = async (payload: { title: string; description: string; color: string }) => {
@@ -949,6 +1024,7 @@ export default function App() {
         onToggleRight={() => setRightCollapsed((v) => !v)}
         onToggleFocusMode={toggleFocusMode}
         onToggleEinkMode={() => setEinkMode((v) => !v)}
+        onOpenAnalytics={() => setShowAnalytics(true)}
         onOpenGlobalRag={() => setShowGlobalRag(true)}
         onOpenSettings={() => setShowSettings(true)}
       />
@@ -969,6 +1045,7 @@ export default function App() {
           onCreateNotebook={handleCreateNotebook}
           onDeleteNotebook={handleDeleteNotebook}
           onJumpToRagMemory={handleJumpToMemory}
+          onOpenAnalytics={() => setShowAnalytics(true)}
         />
       ) : (
         <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
@@ -984,6 +1061,7 @@ export default function App() {
                 onUpdateSource={handleUpdateSource}
                 onClassifySources={handleClassifySources}
                 onDeleteSource={handleDeleteSource}
+                onOpenAnalytics={() => setShowAnalytics(true)}
                 onCollapse={() => setLeftCollapsed(true)}
               />
             )}
@@ -1009,6 +1087,10 @@ export default function App() {
                     onUpdateSource={handleUpdateSource}
                     onClassifySources={handleClassifySources}
                     onDeleteSource={handleDeleteSource}
+                    onOpenAnalytics={() => {
+                      setMobileDrawer('none');
+                      setShowAnalytics(true);
+                    }}
                     onCollapse={() => setMobileDrawer('none')}
                   />
                 </div>
@@ -1072,6 +1154,7 @@ export default function App() {
                   jumpPage={jumpPage}
                   einkMode={einkMode}
                   suppressAutoRestore={suppressAutoRestore}
+                  liveSessionSeconds={liveSessionSeconds}
                   onSaveReadingPosition={handleSaveReadingPosition}
                   onSelectHighlight={(hlId) => {
                     setActiveHighlightId(hlId);
@@ -1091,6 +1174,7 @@ export default function App() {
                   fullWidthReading={leftCollapsed && rightCollapsed}
                   einkMode={einkMode}
                   suppressAutoRestore={suppressAutoRestore}
+                  liveSessionSeconds={liveSessionSeconds}
                   onSaveReadingPosition={handleSaveReadingPosition}
                   onSelectHighlight={(hlId) => {
                     setActiveHighlightId(hlId);
@@ -1520,6 +1604,29 @@ export default function App() {
             setRagStats(st);
           }}
           onClose={() => setShowSettings(false)}
+        />
+      )}
+
+      {showAnalytics && (
+        <ReadingAnalyticsModal
+          activeNotebook={activeNotebook}
+          models={models}
+          selectedModel={selectedModel}
+          onSelectModel={setSelectedModel}
+          onJumpToSource={async (notebookId, sourceId) => {
+            let targetNb = notebooks.find((n) => n.id === notebookId) || null;
+            if (!targetNb) {
+              const fresh = await refreshNotebooks();
+              targetNb = fresh.find((n) => n.id === notebookId) || null;
+            }
+            if (!targetNb) return;
+            if (activeNotebook?.id !== targetNb.id) {
+              await openNotebook(targetNb, sourceId);
+            } else if (activeSource?.id !== sourceId) {
+              await loadSource(sourceId);
+            }
+          }}
+          onClose={() => setShowAnalytics(false)}
         />
       )}
 

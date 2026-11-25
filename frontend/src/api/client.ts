@@ -13,6 +13,10 @@ import type {
   Notebook,
   RagMemoryRef,
   RagStats,
+  ReadingAiReport,
+  ReadingAnalytics,
+  ReadingHeartbeatPayload,
+  ReadingHeartbeatResponse,
   SelectionSpeechResult,
   SourceDetail,
   SourceSummary,
@@ -78,7 +82,13 @@ export const api = {
     }),
   updateSource: (
     sourceId: string,
-    payload: { title?: string; category?: string; last_page?: number; last_scroll_ratio?: number },
+    payload: {
+      title?: string;
+      category?: string;
+      last_page?: number;
+      last_scroll_ratio?: number;
+      reading_progress?: number;
+    },
   ) =>
     requestJson<SourceDetail>(`/api/sources/${sourceId}`, {
       method: 'PATCH',
@@ -178,6 +188,26 @@ export const api = {
     }),
   locateSpeechSegment: (sourceId: string, payload: { text: string; page_number?: number }) =>
     requestJson<LocateSpeechResponse>(`/api/sources/${sourceId}/speech-script/locate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }),
+
+  sendReadingHeartbeat: (payload: ReadingHeartbeatPayload) =>
+    requestJson<ReadingHeartbeatResponse>('/api/analytics/reading/heartbeat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    }),
+  getReadingAnalytics: (params?: { notebookId?: string; days?: number }) => {
+    const qs = new URLSearchParams();
+    if (params?.notebookId) qs.set('notebook_id', params.notebookId);
+    if (params?.days) qs.set('days', String(params.days));
+    const q = qs.toString();
+    return requestJson<ReadingAnalytics>(`/api/analytics/reading${q ? `?${q}` : ''}`);
+  },
+  generateReadingAiReport: (payload: { notebook_id?: string | null; days?: number; model?: string }) =>
+    requestJson<ReadingAiReport>('/api/analytics/reading/ai-report', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),

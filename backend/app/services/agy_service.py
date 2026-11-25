@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from app.config import AGY_BIN, DEFAULT_MODEL, ensure_data_dirs
-from app.schemas import AgyModelOut, HighlightOut, MessageOut, RagMemoryRef
+from app.schemas import AgyModelOut, HighlightOut, MessageOut, RagMemoryRef, ReadingAnalyticsResponse
 from app.services.tts_service import detect_language
 
 _ANSI_ESCAPE_RE = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
@@ -806,6 +806,60 @@ async def generate_full_speech_script_with_agy(
         all_segments.extend(parsed_segments)
 
     return all_segments
+
+
+def build_reading_behavior_prompt(analytics: ReadingAnalyticsResponse) -> str:
+    s = analytics.summary
+    p = analytics.behavior_profile
+    cats = "\n".join(
+        f"- {c.label}: {c.source_count} 份, 平均进度 {round(c.avg_progress * 100)}%, 累计 {round(c.reading_seconds / 60, 1)} 分钟, {c.highlight_count} 划线"
+        for c in analytics.category_breakdown[:6]
+    ) or "（暂无主题分类数据）"
+    top_sources = "\n".join(
+        f"- 《{src.title}》({src.type}, 分类:{src.category or '未分类'}): 进度 {round(src.reading_progress * 100)}%, 时长 {round(src.reading_seconds / 60, 1)} 分钟, {src.highlight_count} 划线, {src.qa_count} 次问答"
+        for src in analytics.source_stats[:10]
+    ) or "（暂无阅读素材）"
+
+    return (
+        "你是一位资深的认知科学学习教练与个人知识管理顾问。请根据下面这位学习者的真实阅读行为遥测数据，为其撰写一份专业、有洞察力且可落地的《个人阅读行为深度分析报告》。\n"
+        "重要约束：不要调用任何工具，直接输出结构清晰的中文 Markdown 报告。\n\n"
+        f"【核心阅读统计（近 {analytics.days} 天）】\n"
+        f"- 累计有效阅读时长：{round(s.total_reading_seconds / 60, 1)} 分钟（今日 {round(s.today_reading_seconds / 60, 1)} 分钟）\n"
+        f"- 学习连续性：活跃 {s.active_days} 天，当前连续 {s.current_streak_days} 天，共 {s.total_sessions} 次阅读会话\n"
+        f"- 单次专注度：平均单次 {round(s.avg_session_seconds / 60, 1)} 分钟，最长单次 {round(s.longest_session_seconds / 60, 1)} 分钟\n"
+        f"- 素材推进情况：共 {s.total_sources} 份素材（已读完 {s.completed_sources} 份、在读 {s.in_progress_sources} 份、未开始 {s.unread_sources} 份），平均进度 {round(s.avg_progress * 100)}%\n"
+        f"- 互动吸收深度：累计 {s.total_highlights} 处划线笔记（{s.highlights_per_hour}/小时）、{s.total_qa_turns} 次 AI 提问（{s.qa_per_hour}/小时）\n"
+        f"- 初步画像：{p.reader_archetype} | 黄金时段：{p.peak_period_label} | {p.focus_style} | {p.engagement_style}\n\n"
+        f"【分类分布】\n{cats}\n\n"
+        f"【主要素材进度明细】\n{top_sources}\n\n"
+        "请严格围绕以下 4 个章节展开：\n"
+        "### 1. 阅读习惯与时间画像\n"
+        "### 2. 学习深度与互动效率\n"
+        "### 3. 素材推进与瓶颈诊断\n"
+        "### 4. 下一步可执行改进建议（3 条具体行动方案）"
+    )
+
+
+async def generate_reading_behavior_analysis_with_agy(
+    *,
+    analytics: ReadingAnalyticsResponse,
+    model: str,
+) -> str:
+    prompt = build_reading_behavior_prompt(analytics)
+    chunks: list[str] = []
+    result_text = ""
+    async for kind, data in agy_service.stream_prompt(
+        thread_key=f"analytics:{analytics.scope_notebook_id or 'global'}",
+        model=model,
+        prompt=prompt,
+    ):
+        if kind == "delta":
+            chunks.append(str(data))
+        elif kind == "result" and isinstance(data, dict):
+            result_text = str(data.get("response") or "")
+        elif kind == "error":
+            raise RuntimeError(str(data))
+    return (result_text or "".join(chunks)).strip()
 
 
 agy_service = AgyService()

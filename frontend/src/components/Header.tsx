@@ -1,5 +1,6 @@
 import {
   ArrowLeft,
+  BarChart3,
   BookOpenText,
   Contrast,
   Database,
@@ -28,6 +29,7 @@ interface HeaderProps {
   onToggleRight?: () => void;
   onToggleFocusMode?: () => void;
   onToggleEinkMode?: () => void;
+  onOpenAnalytics: () => void;
   onOpenGlobalRag: () => void;
   onOpenSettings: () => void;
 }
@@ -46,6 +48,7 @@ export function Header({
   onToggleRight,
   onToggleFocusMode,
   onToggleEinkMode,
+  onOpenAnalytics,
   onOpenGlobalRag,
   onOpenSettings,
 }: HeaderProps) {
@@ -144,6 +147,15 @@ export function Header({
             <span className="hidden sm:inline">墨水屏</span>
           </button>
         )}
+
+        <button
+          onClick={onOpenAnalytics}
+          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-[#E5E0D5] bg-[#FAF8F4] hover:bg-[#EFECE5] text-xs font-medium text-[#1C1B18] transition cursor-pointer"
+          title="查看阅读进度、阅读时长与阅读行为分析"
+        >
+          <BarChart3 className="w-3.5 h-3.5 text-[#B45309]" />
+          <span className="hidden md:inline">阅读统计</span>
+        </button>
 
         <button
           onClick={onOpenGlobalRag}

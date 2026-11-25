@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { BookOpen, Database, FileText, Highlighter, MessageSquare, Plus, Search, Trash2 } from 'lucide-react';
+import { BarChart3, BookOpen, Clock, Database, FileText, Highlighter, MessageSquare, Plus, Search, Trash2 } from 'lucide-react';
 import type { Notebook, RagMemoryRef } from '../types';
 import { api } from '../api/client';
+import { formatShortDuration } from '../utils/formatDuration';
 
 const NOTEBOOK_PALETTE = ['#B45309', '#0F766E', '#1D4ED8', '#BE123C', '#6D28D9', '#374151'];
 
@@ -11,6 +12,7 @@ interface NotebookGridProps {
   onCreateNotebook: (payload: { title: string; description: string; color: string }) => Promise<void>;
   onDeleteNotebook: (id: string) => Promise<void>;
   onJumpToRagMemory: (hit: RagMemoryRef) => void;
+  onOpenAnalytics: () => void;
 }
 
 export function NotebookGrid({
@@ -19,6 +21,7 @@ export function NotebookGrid({
   onCreateNotebook,
   onDeleteNotebook,
   onJumpToRagMemory,
+  onOpenAnalytics,
 }: NotebookGridProps) {
   const [showCreate, setShowCreate] = useState(false);
   const [title, setTitle] = useState('');
@@ -68,13 +71,22 @@ export function NotebookGrid({
                 拖入 PDF / Word / 网页素材，划线记录灵感与 AI 问答；每次提问都会沉淀到 RAG 记忆库，随时跨本调取。
               </p>
             </div>
-            <button
-              onClick={() => setShowCreate(true)}
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#B45309] hover:bg-[#92400E] text-white text-sm font-medium shadow-xs transition cursor-pointer shrink-0"
-            >
-              <Plus className="w-4 h-4" />
-              <span>新建笔记本</span>
-            </button>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={onOpenAnalytics}
+                className="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-xl border border-[#E5E0D5] bg-white hover:border-[#B45309] text-[#1C1B18] text-sm font-medium shadow-xs transition cursor-pointer"
+              >
+                <BarChart3 className="w-4 h-4 text-[#B45309]" />
+                <span>阅读行为分析</span>
+              </button>
+              <button
+                onClick={() => setShowCreate(true)}
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#B45309] hover:bg-[#92400E] text-white text-sm font-medium shadow-xs transition cursor-pointer"
+              >
+                <Plus className="w-4 h-4" />
+                <span>新建笔记本</span>
+              </button>
+            </div>
           </div>
 
           <form onSubmit={handleRagSearch} className="mt-5 flex gap-2">
@@ -180,16 +192,34 @@ export function NotebookGrid({
                   </p>
                 </div>
 
-                <div className="mt-4 pt-3 border-t border-[#F0ECE3] flex items-center gap-4 text-xs text-[#5E5B53]">
-                  <span className="inline-flex items-center gap-1">
-                    <FileText className="w-3.5 h-3.5" /> {nb.source_count} 份资料
-                  </span>
-                  <span className="inline-flex items-center gap-1">
-                    <Highlighter className="w-3.5 h-3.5" /> {nb.highlight_count} 处划线
-                  </span>
-                  <span className="inline-flex items-center gap-1">
-                    <MessageSquare className="w-3.5 h-3.5" /> {nb.qa_count} 次问答
-                  </span>
+                <div className="mt-4 pt-3 border-t border-[#F0ECE3] space-y-2">
+                  <div className="flex flex-wrap items-center gap-3 text-xs text-[#5E5B53]">
+                    <span className="inline-flex items-center gap-1">
+                      <FileText className="w-3.5 h-3.5" /> {nb.source_count} 份资料
+                    </span>
+                    <span className="inline-flex items-center gap-1">
+                      <Highlighter className="w-3.5 h-3.5" /> {nb.highlight_count} 处划线
+                    </span>
+                    <span className="inline-flex items-center gap-1">
+                      <MessageSquare className="w-3.5 h-3.5" /> {nb.qa_count} 次问答
+                    </span>
+                    {nb.total_reading_seconds > 0 && (
+                      <span className="inline-flex items-center gap-1 text-[#B45309] font-medium">
+                        <Clock className="w-3.5 h-3.5" /> {formatShortDuration(nb.total_reading_seconds)}
+                      </span>
+                    )}
+                  </div>
+                  {nb.source_count > 0 && (
+                    <div className="flex items-center gap-2 text-[10px] text-[#8E897E]">
+                      <div className="flex-1 h-1.5 rounded-full bg-[#EFECE5] overflow-hidden">
+                        <div
+                          style={{ width: `${Math.round((nb.avg_reading_progress || 0) * 100)}%` }}
+                          className="h-full rounded-full bg-[#B45309]"
+                        />
+                      </div>
+                      <span className="tabular-nums shrink-0">{Math.round((nb.avg_reading_progress || 0) * 100)}%</span>
+                    </div>
+                  )}
                 </div>
               </div>
             ))}

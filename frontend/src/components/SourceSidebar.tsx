@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowDownAZ,
   ArrowUpZA,
+  BarChart3,
   Check,
   ChevronDown,
   ChevronRight,
@@ -23,6 +24,7 @@ import {
   X,
 } from 'lucide-react';
 import type { SourceSummary } from '../types';
+import { formatShortDuration } from '../utils/formatDuration';
 
 type SourceSortMode = 'recent' | 'name_asc' | 'name_desc';
 
@@ -36,6 +38,7 @@ interface SourceSidebarProps {
   onUpdateSource: (sourceId: string, patch: { title?: string; category?: string }) => Promise<void>;
   onClassifySources: () => Promise<void>;
   onDeleteSource: (sourceId: string) => Promise<void>;
+  onOpenAnalytics?: () => void;
   onCollapse?: () => void;
 }
 
@@ -49,6 +52,7 @@ export function SourceSidebar({
   onUpdateSource,
   onClassifySources,
   onDeleteSource,
+  onOpenAnalytics,
   onCollapse,
 }: SourceSidebarProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -378,8 +382,30 @@ export function SourceSidebar({
           <span className="shrink-0">
             {src.type === 'pdf' ? `${src.page_count} 页` : `${src.word_count} 字`}
             {src.type === 'pdf' && src.last_page > 1 ? ` · P.${src.last_page}` : ''}
-            {src.type !== 'pdf' && src.last_scroll_ratio >= 0.05 ? ` · ${Math.round(src.last_scroll_ratio * 100)}%` : ''}
+            {src.reading_seconds > 0 ? ` · ${formatShortDuration(src.reading_seconds)}` : ''}
             {src.highlight_count > 0 ? ` · ${src.highlight_count} 划线` : ''}
+          </span>
+        </div>
+
+        <div className="mt-1.5 flex items-center gap-1.5">
+          <div className="flex-1 h-1 rounded-full bg-[#EAE5DA] overflow-hidden">
+            <div
+              style={{
+                width: `${Math.round((src.reading_progress || 0) * 100)}%`,
+              }}
+              className={`h-full rounded-full transition-all ${
+                (src.reading_progress || 0) >= 0.95 ? 'bg-emerald-600' : 'bg-[#B45309]'
+              }`}
+            />
+          </div>
+          <span
+            className={`text-[10px] tabular-nums shrink-0 ${
+              (src.reading_progress || 0) >= 0.95 ? 'text-emerald-700 font-semibold' : 'text-[#8E897E]'
+            }`}
+          >
+            {(src.reading_progress || 0) >= 0.95
+              ? '已读完'
+              : `${Math.round((src.reading_progress || 0) * 100)}%`}
           </span>
         </div>
       </div>
@@ -502,6 +528,44 @@ export function SourceSidebar({
         {errorMsg && (
           <div className="text-[11px] text-rose-700 bg-rose-50 border border-rose-200 rounded-lg px-2.5 py-1.5">
             {errorMsg}
+          </div>
+        )}
+
+        {/* Reading Stats Summary Bar */}
+        {sources.length > 0 && (
+          <div className="rounded-xl bg-white border border-[#E5E0D5] px-2.5 py-2 space-y-1.5">
+            <div className="flex items-center justify-between text-[11px]">
+              <span className="text-[#5E5B53] tabular-nums">
+                总阅读 <strong className="text-[#1C1B18]">{formatShortDuration(sources.reduce((acc, s) => acc + (s.reading_seconds || 0), 0))}</strong>
+                {' · '}均进度{' '}
+                <strong className="text-[#B45309]">
+                  {Math.round(
+                    (sources.reduce((acc, s) => acc + (s.reading_progress || 0), 0) / sources.length) * 100,
+                  )}
+                  %
+                </strong>
+              </span>
+              {onOpenAnalytics && (
+                <button
+                  type="button"
+                  onClick={onOpenAnalytics}
+                  className="inline-flex items-center gap-0.5 text-[11px] font-medium text-[#B45309] hover:underline cursor-pointer"
+                >
+                  <BarChart3 className="w-3 h-3" />
+                  <span>分析</span>
+                </button>
+              )}
+            </div>
+            <div className="h-1 rounded-full bg-[#EFECE5] overflow-hidden">
+              <div
+                style={{
+                  width: `${Math.round(
+                    (sources.reduce((acc, s) => acc + (s.reading_progress || 0), 0) / sources.length) * 100,
+                  )}%`,
+                }}
+                className="h-full rounded-full bg-[#B45309]"
+              />
+            </div>
           </div>
         )}
 

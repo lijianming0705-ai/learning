@@ -42,6 +42,10 @@ CREATE TABLE IF NOT EXISTS sources (
     is_scanned INTEGER NOT NULL DEFAULT 0,
     last_page INTEGER NOT NULL DEFAULT 1,
     last_scroll_ratio REAL NOT NULL DEFAULT 0.0,
+    reading_seconds INTEGER NOT NULL DEFAULT 0,
+    reading_progress REAL NOT NULL DEFAULT 0.0,
+    last_read_at TEXT,
+    read_sessions_count INTEGER NOT NULL DEFAULT 0,
     status TEXT NOT NULL DEFAULT 'ready',
     error_message TEXT,
     created_at TEXT NOT NULL,
@@ -118,6 +122,23 @@ CREATE TABLE IF NOT EXISTS source_speech_segments (
 );
 CREATE INDEX IF NOT EXISTS idx_speech_source ON source_speech_segments(source_id, segment_index);
 
+CREATE TABLE IF NOT EXISTS reading_sessions (
+    id TEXT PRIMARY KEY,
+    notebook_id TEXT NOT NULL REFERENCES notebooks(id) ON DELETE CASCADE,
+    source_id TEXT NOT NULL REFERENCES sources(id) ON DELETE CASCADE,
+    started_at TEXT NOT NULL,
+    ended_at TEXT NOT NULL,
+    duration_seconds INTEGER NOT NULL DEFAULT 0,
+    start_page INTEGER NOT NULL DEFAULT 1,
+    end_page INTEGER NOT NULL DEFAULT 1,
+    pages_visited INTEGER NOT NULL DEFAULT 1,
+    progress_delta REAL NOT NULL DEFAULT 0.0,
+    local_date TEXT NOT NULL,
+    local_hour INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_reading_sessions_date ON reading_sessions(local_date, notebook_id);
+CREATE INDEX IF NOT EXISTS idx_reading_sessions_source ON reading_sessions(source_id, started_at);
+
 CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL
@@ -164,6 +185,14 @@ def init_study_db() -> None:
             conn.execute("ALTER TABLE sources ADD COLUMN last_page INTEGER NOT NULL DEFAULT 1")
         if "last_scroll_ratio" not in cols:
             conn.execute("ALTER TABLE sources ADD COLUMN last_scroll_ratio REAL NOT NULL DEFAULT 0.0")
+        if "reading_seconds" not in cols:
+            conn.execute("ALTER TABLE sources ADD COLUMN reading_seconds INTEGER NOT NULL DEFAULT 0")
+        if "reading_progress" not in cols:
+            conn.execute("ALTER TABLE sources ADD COLUMN reading_progress REAL NOT NULL DEFAULT 0.0")
+        if "last_read_at" not in cols:
+            conn.execute("ALTER TABLE sources ADD COLUMN last_read_at TEXT")
+        if "read_sessions_count" not in cols:
+            conn.execute("ALTER TABLE sources ADD COLUMN read_sessions_count INTEGER NOT NULL DEFAULT 0")
         hl_cols = {r["name"] for r in conn.execute("PRAGMA table_info(highlights)").fetchall()}
         if "image_path" not in hl_cols:
             conn.execute("ALTER TABLE highlights ADD COLUMN image_path TEXT")

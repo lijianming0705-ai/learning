@@ -34,6 +34,8 @@ class NotebookOut(BaseModel):
     source_count: int = 0
     highlight_count: int = 0
     qa_count: int = 0
+    total_reading_seconds: int = 0
+    avg_reading_progress: float = 0.0
     created_at: str
     updated_at: str
 
@@ -57,6 +59,10 @@ class SourceSummary(BaseModel):
     is_scanned: bool = False
     last_page: int = 1
     last_scroll_ratio: float = 0.0
+    reading_seconds: int = 0
+    reading_progress: float = 0.0
+    last_read_at: str | None = None
+    read_sessions_count: int = 0
     status: str = "ready"
     error_message: str | None = None
     created_at: str
@@ -68,6 +74,7 @@ class SourceUpdate(BaseModel):
     category: str | None = Field(default=None, max_length=60)
     last_page: int | None = Field(default=None, ge=1)
     last_scroll_ratio: float | None = Field(default=None, ge=0.0, le=1.0)
+    reading_progress: float | None = Field(default=None, ge=0.0, le=1.0)
 
 
 class ClassifySourcesRequest(BaseModel):
@@ -287,3 +294,116 @@ class LocateSpeechResponse(BaseModel):
     segment_id: str
     page_number: int
     score: float
+
+
+class ReadingHeartbeatRequest(BaseModel):
+    session_id: str = Field(min_length=4, max_length=120)
+    source_id: str
+    delta_seconds: int = Field(ge=1, le=120)
+    current_page: int = Field(default=1, ge=1)
+    scroll_ratio: float = Field(default=0.0, ge=0.0, le=1.0)
+    progress: float = Field(default=0.0, ge=0.0, le=1.0)
+    local_date: str | None = Field(default=None, max_length=16)
+    local_hour: int | None = Field(default=None, ge=0, le=23)
+
+
+class ReadingHeartbeatResponse(BaseModel):
+    source_id: str
+    session_id: str
+    reading_seconds: int
+    reading_progress: float
+    last_read_at: str
+    session_duration_seconds: int
+
+
+class ReadingSummaryMetrics(BaseModel):
+    total_reading_seconds: int
+    today_reading_seconds: int
+    avg_session_seconds: int
+    longest_session_seconds: int
+    total_sessions: int
+    active_days: int
+    current_streak_days: int
+    total_sources: int
+    completed_sources: int
+    in_progress_sources: int
+    unread_sources: int
+    avg_progress: float
+    total_highlights: int
+    total_qa_turns: int
+    highlights_per_hour: float
+    qa_per_hour: float
+
+
+class DailyReadingPoint(BaseModel):
+    date: str
+    reading_seconds: int
+    sessions_count: int
+    highlights_count: int
+    qa_count: int
+
+
+class HourlyReadingPoint(BaseModel):
+    hour: int
+    reading_seconds: int
+    sessions_count: int
+
+
+class CategoryReadingStat(BaseModel):
+    label: str
+    reading_seconds: int
+    source_count: int
+    avg_progress: float
+    highlight_count: int
+
+
+class SourceReadingStat(BaseModel):
+    source_id: str
+    notebook_id: str
+    notebook_title: str
+    title: str
+    type: str
+    category: str
+    page_count: int
+    word_count: int
+    last_page: int
+    reading_progress: float
+    reading_seconds: int
+    read_sessions_count: int
+    highlight_count: int
+    qa_count: int
+    last_read_at: str | None = None
+    estimated_remaining_seconds: int | None = None
+
+
+class ReadingBehaviorProfile(BaseModel):
+    reader_archetype: str
+    peak_period_label: str
+    focus_style: str
+    engagement_style: str
+    completion_rate: float
+    insights: list[str]
+
+
+class ReadingAnalyticsResponse(BaseModel):
+    scope_notebook_id: str | None = None
+    days: int
+    summary: ReadingSummaryMetrics
+    daily_trend: list[DailyReadingPoint]
+    hourly_distribution: list[HourlyReadingPoint]
+    category_breakdown: list[CategoryReadingStat]
+    type_breakdown: list[CategoryReadingStat]
+    source_stats: list[SourceReadingStat]
+    behavior_profile: ReadingBehaviorProfile
+
+
+class ReadingAiReportRequest(BaseModel):
+    notebook_id: str | None = None
+    days: int = Field(default=30, ge=7, le=365)
+    model: str | None = None
+
+
+class ReadingAiReportResponse(BaseModel):
+    report_markdown: str
+    model: str
+    generated_at: str
