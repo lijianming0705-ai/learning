@@ -9,6 +9,7 @@ import hashlib
 import json
 import queue
 import re
+import secrets
 import shutil
 import signal
 import sqlite3
@@ -16,11 +17,27 @@ import subprocess
 import sys
 import threading
 import time
+import urllib.error
+import urllib.request
+import uuid
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qs, unquote, urlparse
+from urllib.parse import parse_qs, quote, unquote, urlencode, urlparse
+
+from mindbubble_mcp_core import (
+    DEFAULT_DB_PATH as _MCP_DEFAULT_DB_PATH,
+    McpJsonRpcHandler,
+    MindBubbleBackend,
+    MindBubbleMcpService,
+    PROMPT_SPECS as MCP_PROMPT_SPECS,
+    RESOURCE_SPECS as MCP_RESOURCE_SPECS,
+    TOOL_SPECS as MCP_TOOL_SPECS,
+    build_antigravity_mcp_entry,
+    get_antigravity_registration_status,
+    install_into_antigravity,
+)
 
 MAX_BODY_BYTES = 20 * 1024 * 1024
 BASE_DIR = Path(__file__).resolve().parent
@@ -31,6 +48,14 @@ AGY_WORKDIR = BASE_DIR / "data" / "mindbubble-agy-workdir"
 DEFAULT_AGY_MODEL = "gemini-4-hydrogen-medium"
 _ANSI_ESCAPE_RE = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
 _MODEL_LINE_RE = re.compile(r"^([a-z0-9][a-z0-9._-]{2,})\s+(.+)$")
+
+GDRIVE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
+GDRIVE_TOKEN_URL = "https://oauth2.googleapis.com/token"
+GDRIVE_REVOKE_URL = "https://oauth2.googleapis.com/revoke"
+GDRIVE_USERINFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo"
+GDRIVE_FILES_URL = "https://www.googleapis.com/drive/v3/files"
+GDRIVE_UPLOAD_URL = "https://www.googleapis.com/upload/drive/v3/files"
+GDRIVE_FILE_ID_RE = re.compile(r"^[A-Za-z0-9_-]{8,128}$")
 
 EMPTY_STATE: dict[str, Any] = {
     "tasks": [],
@@ -77,6 +102,76 @@ def _sanitize_tag_catalog(raw_catalog: Any, tasks: list[Any]) -> list[str]:
     return catalog
 
 
+DEFAULT_GALAXY_ID = "gal_default"
+DEFAULT_GALAXY = {
+    "id": DEFAULT_GALAXY_ID,
+    "name": "默认星系",
+    "icon": "🪐",
+    "color": "#38bdf8",
+    "description": "默认空间 · 自动收纳既有与未归类气泡",
+    "createdAt": 0,
+    "isDefault": True,
+}
+
+
+def _sanitize_galaxies(raw_galaxies: Any, fallback_prefs_galaxies: Any = None) -> list[dict[str, Any]]:
+    """Normalize Galaxy list and always guarantee built-in Default Galaxy first."""
+    candidates: list[Any] = []
+    if isinstance(raw_galaxies, list) and len(raw_galaxies) > 0:
+        candidates = raw_galaxies
+    elif isinstance(fallback_prefs_galaxies, list) and len(fallback_prefs_galaxies) > 0:
+        candidates = fallback_prefs_galaxies
+
+    by_id: dict[str, dict[str, Any]] = {}
+    order: list[str] = []
+
+    for item in candidates:
+        if not isinstance(item, dict):
+            continue
+        raw_id = item.get("id")
+        if not isinstance(raw_id, str):
+            continue
+        gid = raw_id.strip()[:64]
+        if not gid or gid == "__universe__" or gid in by_id:
+            continue
+        is_def = gid == DEFAULT_GALAXY_ID
+        raw_name = item.get("name")
+        name = str(raw_name).strip()[:32] if isinstance(raw_name, str) and raw_name.strip() else (
+            DEFAULT_GALAXY["name"] if is_def else f"星系 {len(order) + 1}"
+        )
+        raw_icon = item.get("icon")
+        icon = str(raw_icon).strip()[:8] if isinstance(raw_icon, str) and raw_icon.strip() else (
+            DEFAULT_GALAXY["icon"] if is_def else "✨"
+        )
+        raw_color = item.get("color")
+        color = raw_color.strip()[:16] if isinstance(raw_color, str) and raw_color.strip().startswith("#") else DEFAULT_GALAXY["color"]
+        raw_desc = item.get("description")
+        desc = str(raw_desc).strip()[:120] if isinstance(raw_desc, str) else (DEFAULT_GALAXY["description"] if is_def else "")
+        raw_created = item.get("createdAt")
+        created_at = int(raw_created) if (isinstance(raw_created, (int, float)) and not isinstance(raw_created, bool) and raw_created > 0) else 0
+
+        by_id[gid] = {
+            "id": gid,
+            "name": name,
+            "icon": icon,
+            "color": color,
+            "description": desc,
+            "createdAt": created_at,
+            "isDefault": is_def,
+        }
+        order.append(gid)
+
+    default_entry = by_id.get(DEFAULT_GALAXY_ID) or dict(DEFAULT_GALAXY)
+    default_entry["id"] = DEFAULT_GALAXY_ID
+    default_entry["isDefault"] = True
+
+    result = [default_entry]
+    for gid in order:
+        if gid != DEFAULT_GALAXY_ID:
+            result.append(by_id[gid])
+    return result
+
+
 def sanitize_state(data: Any) -> dict[str, Any]:
     """Validate and normalize incoming workspace JSON payload."""
     if not isinstance(data, dict) or not isinstance(data.get("tasks"), list):
@@ -84,13 +179,50 @@ def sanitize_state(data: Any) -> dict[str, Any]:
 
     prefs = data.get("prefs") if isinstance(data.get("prefs"), dict) else {}
     clean_prefs = {k: v for k, v in prefs.items() if k != "llmApiKey"}
-    tasks = data["tasks"]
+    galaxies = _sanitize_galaxies(data.get("galaxies"), clean_prefs.get("galaxies"))
+    valid_galaxy_ids = {g["id"] for g in galaxies}
+    clean_prefs["galaxies"] = galaxies
+
+    tasks: list[Any] = []
+    for t in data["tasks"]:
+        if isinstance(t, dict):
+            nt = dict(t)
+            raw_gid = nt.get("galaxyId")
+            nt["galaxyId"] = raw_gid if isinstance(raw_gid, str) and raw_gid in valid_galaxy_ids else DEFAULT_GALAXY_ID
+            if bool(nt.get("completed")):
+                raw_comp = nt.get("completedAt")
+                if (
+                    isinstance(raw_comp, (int, float))
+                    and not isinstance(raw_comp, bool)
+                    and (raw_comp - raw_comp == 0)
+                    and raw_comp > 0
+                ):
+                    nt["completedAt"] = int(raw_comp)
+                else:
+                    nt["completedAt"] = None
+            else:
+                nt["completedAt"] = None
+            tasks.append(nt)
+        else:
+            tasks.append(t)
+
+    raw_clusters = data.get("clusters") if isinstance(data.get("clusters"), list) else []
+    clusters: list[Any] = []
+    for c in raw_clusters:
+        if isinstance(c, dict):
+            nc = dict(c)
+            raw_cgid = nc.get("galaxyId")
+            nc["galaxyId"] = raw_cgid if isinstance(raw_cgid, str) and raw_cgid in valid_galaxy_ids else DEFAULT_GALAXY_ID
+            clusters.append(nc)
+        else:
+            clusters.append(c)
 
     return {
         "tasks": tasks,
         "manualLinks": data.get("manualLinks") if isinstance(data.get("manualLinks"), list) else [],
-        "clusters": data.get("clusters") if isinstance(data.get("clusters"), list) else [],
+        "clusters": clusters,
         "aiLinks": data.get("aiLinks") if isinstance(data.get("aiLinks"), list) else [],
+        "galaxies": galaxies,
         "tagCatalog": _sanitize_tag_catalog(data.get("tagCatalog"), tasks),
         "prefs": clean_prefs,
     }
@@ -120,8 +252,10 @@ def _task_signature(t: dict[str, Any]) -> tuple[Any, ...]:
         tuple(t.get("tags") or []),
         t.get("priority"),
         bool(t.get("completed")),
+        t.get("completedAt"),
         t.get("top3Slot"),
         t.get("clusterId"),
+        t.get("galaxyId"),
         t.get("dueAt"),
     )
 
@@ -150,6 +284,7 @@ def compute_diff(base_state: dict[str, Any], target_state: dict[str, Any]) -> di
         "completedDelta": t_comp - b_comp,
         "linkDelta": t_links - b_links,
         "clusterDelta": t_clusters - b_clusters,
+        "galaxyDelta": len(target_state.get("galaxies", [])) - len(base_state.get("galaxies", [])),
         "tagCatalogDelta": len(target_state.get("tagCatalog", [])) - len(base_state.get("tagCatalog", [])),
     }
 
@@ -259,6 +394,29 @@ class MindBubbleStore:
                 INSERT OR IGNORE INTO backup_config (id, auto_backup_enabled, min_interval_sec, max_auto_snapshots)
                 VALUES (1, 1, 0, 120);
                 """
+            )
+            self._conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS gdrive_config (
+                    id INTEGER PRIMARY KEY CHECK (id = 1),
+                    client_id TEXT NOT NULL DEFAULT '',
+                    client_secret TEXT NOT NULL DEFAULT '',
+                    folder_name TEXT NOT NULL DEFAULT 'MindBubble Backups',
+                    folder_id TEXT NOT NULL DEFAULT '',
+                    scope_mode TEXT NOT NULL DEFAULT 'drive.file',
+                    access_token TEXT NOT NULL DEFAULT '',
+                    refresh_token TEXT NOT NULL DEFAULT '',
+                    token_expires_at INTEGER NOT NULL DEFAULT 0,
+                    account_email TEXT NOT NULL DEFAULT '',
+                    account_name TEXT NOT NULL DEFAULT '',
+                    last_backup_at INTEGER NOT NULL DEFAULT 0,
+                    last_backup_file TEXT NOT NULL DEFAULT '',
+                    updated_at INTEGER NOT NULL DEFAULT 0
+                );
+                """
+            )
+            self._conn.execute(
+                "INSERT OR IGNORE INTO gdrive_config (id) VALUES (1);"
             )
             self._conn.commit()
 
@@ -799,6 +957,65 @@ class MindBubbleStore:
             "state": target_state,
         }
 
+    _GDRIVE_COLUMNS = (
+        "client_id",
+        "client_secret",
+        "folder_name",
+        "folder_id",
+        "scope_mode",
+        "access_token",
+        "refresh_token",
+        "token_expires_at",
+        "account_email",
+        "account_name",
+        "last_backup_at",
+        "last_backup_file",
+        "updated_at",
+    )
+
+    def get_gdrive_row(self) -> dict[str, Any]:
+        with self._lock:
+            cols_sql = ", ".join(self._GDRIVE_COLUMNS)
+            row = self._conn.execute(
+                f"SELECT {cols_sql} FROM gdrive_config WHERE id = 1"
+            ).fetchone()
+            if not row:
+                return {
+                    "client_id": "",
+                    "client_secret": "",
+                    "folder_name": "MindBubble Backups",
+                    "folder_id": "",
+                    "scope_mode": "drive.file",
+                    "access_token": "",
+                    "refresh_token": "",
+                    "token_expires_at": 0,
+                    "account_email": "",
+                    "account_name": "",
+                    "last_backup_at": 0,
+                    "last_backup_file": "",
+                    "updated_at": 0,
+                }
+            return {col: row[idx] for idx, col in enumerate(self._GDRIVE_COLUMNS)}
+
+    def update_gdrive_row(self, **fields: Any) -> dict[str, Any]:
+        allowed = set(self._GDRIVE_COLUMNS)
+        updates = {k: v for k, v in fields.items() if k in allowed}
+        with self._lock:
+            if updates:
+                updates.setdefault("updated_at", int(time.time() * 1000))
+                assignments = ", ".join(f"{col} = ?" for col in updates.keys())
+                params = list(updates.values())
+                self._conn.execute(
+                    f"UPDATE gdrive_config SET {assignments} WHERE id = 1",
+                    params,
+                )
+                self._conn.commit()
+            cols_sql = ", ".join(self._GDRIVE_COLUMNS)
+            row = self._conn.execute(
+                f"SELECT {cols_sql} FROM gdrive_config WHERE id = 1"
+            ).fetchone()
+            return {col: row[idx] for idx, col in enumerate(self._GDRIVE_COLUMNS)}
+
     def close(self) -> None:
         with self._lock:
             self._conn.close()
@@ -1260,6 +1477,168 @@ class AgyClient:
             "elapsedMs": int((time.monotonic() - started) * 1000),
         }
 
+    def generate_critical_path(
+        self,
+        tasks: Any,
+        manual_links: Any = None,
+        ai_links: Any = None,
+        target_task_id: str | None = None,
+        model: str | None = None,
+    ) -> dict[str, Any]:
+        if not isinstance(tasks, list) or not tasks:
+            raise ValueError("tasks must be a non-empty list")
+
+        chosen_model = (model or "").strip() or DEFAULT_AGY_MODEL
+
+        compact_tasks: list[dict[str, Any]] = []
+        valid_ids: set[str] = set()
+        for t in tasks[:80]:
+            if not isinstance(t, dict):
+                continue
+            tid = str(t.get("id") or "").strip()
+            if not tid:
+                continue
+            valid_ids.add(tid)
+            compact_tasks.append({
+                "id": tid,
+                "title": str(t.get("title") or "")[:100],
+                "priority": str(t.get("priority") or "normal"),
+                "top3Slot": t.get("top3Slot"),
+                "dueAt": t.get("dueAt"),
+                "completed": bool(t.get("completed")),
+                "tags": [str(x)[:24] for x in (t.get("tags") or [])[:5]],
+                "notes": str(t.get("notes") or "")[:100],
+                "clusterId": t.get("clusterId"),
+            })
+
+        if not compact_tasks:
+            raise ValueError("tasks contains no valid items")
+
+        compact_manual: list[dict[str, str]] = []
+        if isinstance(manual_links, list):
+            for l in manual_links[:120]:
+                if not isinstance(l, dict):
+                    continue
+                src = str(l.get("source") or "").strip()
+                dst = str(l.get("target") or "").strip()
+                if src in valid_ids and dst in valid_ids and src != dst:
+                    compact_manual.append({
+                        "source": src,
+                        "target": dst,
+                        "label": str(l.get("label") or "")[:30],
+                    })
+
+        compact_ai: list[dict[str, str]] = []
+        if isinstance(ai_links, list):
+            for l in ai_links[:120]:
+                if not isinstance(l, dict):
+                    continue
+                src = str(l.get("source") or "").strip()
+                dst = str(l.get("target") or "").strip()
+                if src in valid_ids and dst in valid_ids and src != dst:
+                    compact_ai.append({
+                        "source": src,
+                        "target": dst,
+                        "reason": str(l.get("reason") or "")[:30],
+                    })
+
+        clean_target = str(target_task_id or "").strip()
+        if clean_target not in valid_ids:
+            clean_target = ""
+
+        payload_ctx = {
+            "targetTaskId": clean_target or None,
+            "tasks": compact_tasks,
+            "manualLinks": compact_manual,
+            "aiLinks": compact_ai,
+        }
+        prompt = (
+            "你是一个专业的项目管理与关键路径(CPM)规划专家。不要调用任何工具，也不要读取任何文件，只根据下方任务图数据推导出最重要的一条有序关键路径（3到7步，从前置铺垫逐步推进到终局目标"
+            + (f" {clean_target}" if clean_target else "（或最具价值的核心 Top3/关键里程碑）")
+            + "）。如已有连线稀疏，可结合语义补全前后置依赖。\n"
+            "严格只输出合法 JSON，不要包含 Markdown 代码块或任何额外解释，格式如下：\n"
+            '{"goalTitle":"终局目标标题","summary":"60-120字关键路径洞察与推进建议","bottleneckId":"task_id",'
+            '"steps":[{"taskId":"task_id","reason":"为何排在此步或对下一步的支撑","risk":"潜在阻塞或执行提醒"}],'
+            '"suggestedLinks":[{"source":"前置taskId","target":"后置taskId","reason":"依赖原因"}]}\n'
+            f"任务图数据：{json.dumps(payload_ctx, ensure_ascii=False)}"
+        )
+
+        started = time.monotonic()
+        raw_text = self._ask_with_retry(prompt, chosen_model)
+        cleaned = raw_text.replace("```json", "").replace("```", "").strip()
+        match = re.search(r"\{[\s\S]*\}", cleaned)
+        if not match:
+            raise RuntimeError("AGY 未返回合法 JSON 结构")
+        parsed = json.loads(match.group(0))
+        if not isinstance(parsed, dict):
+            raise RuntimeError("AGY 返回格式异常")
+
+        steps_out: list[dict[str, str]] = []
+        seen_steps: set[str] = set()
+        raw_steps = parsed.get("steps")
+        if isinstance(raw_steps, list):
+            for st in raw_steps:
+                if not isinstance(st, dict):
+                    continue
+                tid = str(st.get("taskId") or "").strip()
+                if not tid or tid not in valid_ids or tid in seen_steps:
+                    continue
+                seen_steps.add(tid)
+                steps_out.append({
+                    "taskId": tid,
+                    "reason": str(st.get("reason") or "").strip()[:120],
+                    "risk": str(st.get("risk") or "").strip()[:120],
+                })
+                if len(steps_out) >= 10:
+                    break
+
+        if not steps_out:
+            raise RuntimeError("AGY 返回的关键路径步骤为空或无效")
+
+        bottleneck_id = str(parsed.get("bottleneckId") or "").strip()
+        if bottleneck_id not in seen_steps:
+            bottleneck_id = steps_out[0]["taskId"]
+
+        suggested_out: list[dict[str, str]] = []
+        seen_pairs: set[str] = set()
+        raw_suggested = parsed.get("suggestedLinks")
+        if isinstance(raw_suggested, list):
+            for lk in raw_suggested:
+                if not isinstance(lk, dict):
+                    continue
+                src = str(lk.get("source") or "").strip()
+                dst = str(lk.get("target") or "").strip()
+                if not src or not dst or src == dst or src not in valid_ids or dst not in valid_ids:
+                    continue
+                pk = f"{src}|{dst}"
+                if pk in seen_pairs:
+                    continue
+                seen_pairs.add(pk)
+                suggested_out.append({
+                    "source": src,
+                    "target": dst,
+                    "reason": str(lk.get("reason") or "AI 推导前置依赖").strip()[:48],
+                })
+                if len(suggested_out) >= 12:
+                    break
+
+        goal_title = str(parsed.get("goalTitle") or "").strip()[:100]
+        summary = str(parsed.get("summary") or "").strip()[:400]
+
+        return {
+            "ok": True,
+            "engine": "agy",
+            "model": chosen_model,
+            "path": {
+                "goalTitle": goal_title,
+                "summary": summary,
+                "bottleneckId": bottleneck_id,
+                "steps": steps_out,
+                "suggestedLinks": suggested_out,
+            },
+            "elapsedMs": int((time.monotonic() - started) * 1000),
+        }
+
     def close(self) -> None:
         with self._pool_lock:
             if self._worker:
@@ -1267,9 +1646,527 @@ class AgyClient:
                 self._worker = None
 
 
-def make_handler(store: MindBubbleStore, agy_client: AgyClient) -> type[BaseHTTPRequestHandler]:
+class GoogleDriveClient:
+    """Stdlib-only Google Drive OAuth 2.0 + Drive v3 backup/restore client."""
+
+    def __init__(self, store: MindBubbleStore) -> None:
+        self.store = store
+        self._lock = threading.Lock()
+        self._pending_states: dict[str, dict[str, Any]] = {}
+
+    def _http_request(
+        self,
+        url: str,
+        method: str = "GET",
+        headers: dict[str, str] | None = None,
+        body: bytes | None = None,
+        timeout: int = 30,
+    ) -> tuple[int, bytes]:
+        req = urllib.request.Request(url, data=body, headers=headers or {}, method=method)
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                return int(resp.status), resp.read()
+        except urllib.error.HTTPError as exc:
+            err_body = exc.read()
+            raise ValueError(self._extract_google_error(exc.code, err_body)) from exc
+        except urllib.error.URLError as exc:
+            raise RuntimeError(f"无法连接 Google 服务: {exc.reason}") from exc
+
+    @staticmethod
+    def _extract_google_error(status_code: int, raw: bytes) -> str:
+        text = raw.decode("utf-8", errors="replace").strip()
+        try:
+            obj = json.loads(text)
+            if isinstance(obj, dict):
+                if isinstance(obj.get("error_description"), str):
+                    return f"Google API ({status_code}): {obj['error_description']}"
+                err = obj.get("error")
+                if isinstance(err, dict) and err.get("message"):
+                    return f"Google API ({status_code}): {err['message']}"
+                if isinstance(err, str):
+                    return f"Google API ({status_code}): {err}"
+        except Exception:
+            pass
+        return f"Google API HTTP {status_code}: {text[:240] or '请求失败'}"
+
+    def _http_json(
+        self,
+        url: str,
+        method: str = "GET",
+        headers: dict[str, str] | None = None,
+        body: bytes | None = None,
+        timeout: int = 30,
+    ) -> Any:
+        _status, raw = self._http_request(url, method=method, headers=headers, body=body, timeout=timeout)
+        return json.loads(raw.decode("utf-8")) if raw else {}
+
+    @staticmethod
+    def parse_credentials_json(raw: Any) -> tuple[str, str]:
+        obj = json.loads(raw) if isinstance(raw, str) else raw
+        if not isinstance(obj, dict):
+            raise ValueError("credentials.json 必须是 JSON 对象")
+        section = obj.get("web") or obj.get("installed") or obj
+        if not isinstance(section, dict):
+            raise ValueError("无法识别的 Google OAuth credentials.json 结构")
+        cid = str(section.get("client_id") or "").strip()
+        csec = str(section.get("client_secret") or "").strip()
+        if not cid or not csec:
+            raise ValueError("credentials.json 中缺少 client_id 或 client_secret")
+        return cid, csec
+
+    @staticmethod
+    def _build_scopes(scope_mode: str) -> str:
+        base = "https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile"
+        if scope_mode == "drive.file+readonly":
+            return f"https://www.googleapis.com/auth/drive.readonly {base}"
+        return base
+
+    def get_status(self, origin: str) -> dict[str, Any]:
+        row = self.store.get_gdrive_row()
+        cid = str(row.get("client_id") or "")
+        csec = str(row.get("client_secret") or "")
+        has_refresh = bool(row.get("refresh_token"))
+        has_live_access = bool(row.get("access_token")) and int(row.get("token_expires_at") or 0) > int(time.time() * 1000) + 15000
+        return {
+            "ok": True,
+            "backendSupported": True,
+            "configured": bool(cid and csec),
+            "hasClientSecret": bool(csec),
+            "clientId": cid,
+            "folderName": str(row.get("folder_name") or "MindBubble Backups"),
+            "folderId": str(row.get("folder_id") or ""),
+            "scopeMode": str(row.get("scope_mode") or "drive.file"),
+            "connected": bool(cid and csec and (has_refresh or has_live_access)),
+            "hasRefreshToken": has_refresh,
+            "accountEmail": str(row.get("account_email") or ""),
+            "accountName": str(row.get("account_name") or ""),
+            "tokenExpiresAt": int(row.get("token_expires_at") or 0),
+            "lastBackupAt": int(row.get("last_backup_at") or 0),
+            "lastBackupFile": str(row.get("last_backup_file") or ""),
+            "redirectUri": f"{origin.rstrip('/')}/api/gdrive/callback",
+            "jsOrigin": origin.rstrip("/"),
+        }
+
+    def save_config(self, payload: Any, origin: str = "http://localhost:8765") -> dict[str, Any]:
+        if not isinstance(payload, dict):
+            raise ValueError("Payload must be a JSON object")
+        cur = self.store.get_gdrive_row()
+        prev_cid = str(cur.get("client_id") or "")
+        prev_folder = str(cur.get("folder_name") or "MindBubble Backups")
+
+        if payload.get("credentialsJson"):
+            cid, csec = self.parse_credentials_json(payload["credentialsJson"])
+        else:
+            cid = str(payload.get("clientId") if "clientId" in payload else prev_cid).strip()
+            if payload.get("clearSecret"):
+                csec = ""
+            elif "clientSecret" in payload and str(payload.get("clientSecret") or "").strip():
+                csec = str(payload["clientSecret"]).strip()
+            elif cid == prev_cid:
+                csec = str(cur.get("client_secret") or "")
+            else:
+                csec = ""
+
+        folder_name = str(payload.get("folderName") or prev_folder).strip()[:80] or "MindBubble Backups"
+        scope_mode = "drive.file+readonly" if payload.get("scopeMode") == "drive.file+readonly" else "drive.file"
+
+        updates: dict[str, Any] = {
+            "client_id": cid,
+            "client_secret": csec,
+            "folder_name": folder_name,
+            "scope_mode": scope_mode,
+        }
+        if cid != prev_cid:
+            updates.update({
+                "access_token": "",
+                "refresh_token": "",
+                "token_expires_at": 0,
+                "account_email": "",
+                "account_name": "",
+                "folder_id": "",
+            })
+        elif folder_name != prev_folder:
+            updates["folder_id"] = ""
+
+        self.store.update_gdrive_row(**updates)
+        return self.get_status(origin)
+
+    def start_auth(self, origin: str) -> dict[str, Any]:
+        row = self.store.get_gdrive_row()
+        cid = str(row.get("client_id") or "").strip()
+        csec = str(row.get("client_secret") or "").strip()
+        if not cid or not csec:
+            raise ValueError("请先保存 Google OAuth Client ID 与 Client Secret")
+
+        redirect_uri = f"{origin.rstrip('/')}/api/gdrive/callback"
+        state_tok = secrets.token_urlsafe(24)
+        now = time.time()
+        with self._lock:
+            expired = [k for k, v in self._pending_states.items() if now - float(v.get("createdAt", 0)) > 600]
+            for k in expired:
+                self._pending_states.pop(k, None)
+            self._pending_states[state_tok] = {"createdAt": now, "redirectUri": redirect_uri}
+
+        params = {
+            "client_id": cid,
+            "redirect_uri": redirect_uri,
+            "response_type": "code",
+            "scope": self._build_scopes(str(row.get("scope_mode") or "drive.file")),
+            "access_type": "offline",
+            "prompt": "consent",
+            "include_granted_scopes": "true",
+            "state": state_tok,
+        }
+        auth_url = f"{GDRIVE_AUTH_URL}?{urlencode(params)}"
+        return {"ok": True, "authUrl": auth_url, "redirectUri": redirect_uri}
+
+    def handle_callback(self, code: str, state: str, error: str = "") -> dict[str, Any]:
+        if error:
+            raise ValueError(f"Google 授权未完成: {error}")
+        if not code or not state:
+            raise ValueError("缺少授权 code 或 state 参数")
+
+        with self._lock:
+            pending = self._pending_states.pop(state, None)
+        if not pending or time.time() - float(pending.get("createdAt", 0)) > 600:
+            raise ValueError("授权 state 无效或已过期，请重新发起授权")
+
+        row = self.store.get_gdrive_row()
+        cid = str(row.get("client_id") or "").strip()
+        csec = str(row.get("client_secret") or "").strip()
+        if not cid or not csec:
+            raise ValueError("OAuth 配置不完整，缺少 Client ID / Secret")
+
+        form_bytes = urlencode({
+            "code": code,
+            "client_id": cid,
+            "client_secret": csec,
+            "redirect_uri": str(pending["redirectUri"]),
+            "grant_type": "authorization_code",
+        }).encode("utf-8")
+
+        tok = self._http_json(
+            GDRIVE_TOKEN_URL,
+            method="POST",
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            body=form_bytes,
+        )
+        access_token = str(tok.get("access_token") or "").strip()
+        if not access_token:
+            raise ValueError("Google 未返回 access_token")
+        refresh_token = str(tok.get("refresh_token") or row.get("refresh_token") or "").strip()
+        expires_in = int(tok.get("expires_in") or 3600)
+        expires_at = int(time.time() * 1000) + max(60, expires_in) * 1000
+
+        email = str(row.get("account_email") or "")
+        name = str(row.get("account_name") or "")
+        try:
+            profile = self._http_json(
+                GDRIVE_USERINFO_URL,
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+            email = str(profile.get("email") or email)
+            name = str(profile.get("name") or email or name)
+        except Exception:
+            pass
+
+        self.store.update_gdrive_row(
+            access_token=access_token,
+            refresh_token=refresh_token,
+            token_expires_at=expires_at,
+            account_email=email,
+            account_name=name,
+        )
+        return {"ok": True, "accountEmail": email, "accountName": name}
+
+    def _ensure_access_token(self) -> str:
+        row = self.store.get_gdrive_row()
+        now_ms = int(time.time() * 1000)
+        cur_access = str(row.get("access_token") or "").strip()
+        if cur_access and int(row.get("token_expires_at") or 0) > now_ms + 60000:
+            return cur_access
+
+        refresh_token = str(row.get("refresh_token") or "").strip()
+        cid = str(row.get("client_id") or "").strip()
+        csec = str(row.get("client_secret") or "").strip()
+        if not refresh_token or not cid or not csec:
+            raise ValueError("Google Drive 授权已过期或未授权，请重新点击授权")
+
+        form_bytes = urlencode({
+            "client_id": cid,
+            "client_secret": csec,
+            "refresh_token": refresh_token,
+            "grant_type": "refresh_token",
+        }).encode("utf-8")
+        tok = self._http_json(
+            GDRIVE_TOKEN_URL,
+            method="POST",
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            body=form_bytes,
+        )
+        new_access = str(tok.get("access_token") or "").strip()
+        if not new_access:
+            raise ValueError("刷新 Google Drive 访问令牌失败，请重新授权")
+        expires_in = int(tok.get("expires_in") or 3600)
+        expires_at = now_ms + max(60, expires_in) * 1000
+        self.store.update_gdrive_row(access_token=new_access, token_expires_at=expires_at)
+        return new_access
+
+    def _ensure_backup_folder(self, token: str) -> tuple[str, str]:
+        row = self.store.get_gdrive_row()
+        folder_name = str(row.get("folder_name") or "MindBubble Backups").strip() or "MindBubble Backups"
+        cached_id = str(row.get("folder_id") or "").strip()
+        headers = {"Authorization": f"Bearer {token}"}
+
+        if cached_id and GDRIVE_FILE_ID_RE.match(cached_id):
+            try:
+                meta = self._http_json(
+                    f"{GDRIVE_FILES_URL}/{quote(cached_id)}?fields=id,name,trashed",
+                    headers=headers,
+                )
+                if meta.get("id") and not meta.get("trashed"):
+                    return str(meta["id"]), str(meta.get("name") or folder_name)
+            except Exception:
+                pass
+
+        escaped = folder_name.replace("\\", "\\\\").replace("'", "\\'")
+        q = f"name='{escaped}' and mimeType='application/vnd.google-apps.folder' and trashed=false"
+        search_url = f"{GDRIVE_FILES_URL}?{urlencode({'q': q, 'fields': 'files(id,name)', 'pageSize': 5, 'spaces': 'drive'})}"
+        found = self._http_json(search_url, headers=headers)
+        files = found.get("files") if isinstance(found, dict) else []
+        if isinstance(files, list) and files:
+            fid = str(files[0]["id"])
+            self.store.update_gdrive_row(folder_id=fid)
+            return fid, str(files[0].get("name") or folder_name)
+
+        created = self._http_json(
+            f"{GDRIVE_FILES_URL}?fields=id,name",
+            method="POST",
+            headers={**headers, "Content-Type": "application/json; charset=utf-8"},
+            body=json.dumps({
+                "name": folder_name,
+                "mimeType": "application/vnd.google-apps.folder",
+            }, ensure_ascii=False).encode("utf-8"),
+        )
+        fid = str(created.get("id") or "")
+        if not fid:
+            raise ValueError("创建 Google Drive 备份文件夹失败")
+        self.store.update_gdrive_row(folder_id=fid)
+        return fid, folder_name
+
+    def upload_backup(self, include_history: bool = True, custom_name: str = "") -> dict[str, Any]:
+        token = self._ensure_access_token()
+        folder_id, folder_name = self._ensure_backup_folder(token)
+        payload = self.store.export_backup(include_history=include_history)
+        if not payload:
+            raise ValueError("无法生成备份数据")
+
+        date_str = time.strftime("%Y%m%d-%H%M%S")
+        suffix = "full" if include_history else "workspace"
+        fname = str(custom_name or "").strip()[:120] or f"mindbubble-backup-{suffix}-{date_str}.json"
+        if not fname.lower().endswith(".json"):
+            fname += ".json"
+
+        cur_state = payload.get("currentState") or {}
+        metadata = {
+            "name": fname,
+            "parents": [folder_id],
+            "mimeType": "application/json",
+            "appProperties": {
+                "app": "mindbubble",
+                "mode": "full" if include_history else "workspace",
+                "tasks": str(len(cur_state.get("tasks") or [])),
+                "galaxies": str(len(cur_state.get("galaxies") or [])),
+                "snapshots": str(len(payload.get("snapshots") or [])),
+                "revision": str(payload.get("revision") or 0),
+            },
+        }
+        boundary = f"mindbubble_{uuid.uuid4().hex}"
+        body = (
+            f"--{boundary}\r\n"
+            f"Content-Type: application/json; charset=UTF-8\r\n\r\n"
+            f"{json.dumps(metadata, ensure_ascii=False)}\r\n"
+            f"--{boundary}\r\n"
+            f"Content-Type: application/json; charset=UTF-8\r\n\r\n"
+            f"{json.dumps(payload, ensure_ascii=False)}\r\n"
+            f"--{boundary}--\r\n"
+        ).encode("utf-8")
+
+        uploaded = self._http_json(
+            f"{GDRIVE_UPLOAD_URL}?uploadType=multipart&fields=id,name,size,modifiedTime,webViewLink,appProperties",
+            method="POST",
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": f"multipart/related; boundary={boundary}",
+            },
+            body=body,
+            timeout=60,
+        )
+        now_ms = int(time.time() * 1000)
+        self.store.update_gdrive_row(last_backup_at=now_ms, last_backup_file=str(uploaded.get("name") or fname))
+        return {"ok": True, "file": uploaded, "folderId": folder_id, "folderName": folder_name, "lastBackupAt": now_ms}
+
+    def list_files(self, search_all: bool = False, limit: int = 30) -> dict[str, Any]:
+        token = self._ensure_access_token()
+        row = self.store.get_gdrive_row()
+        folder_id = ""
+        folder_name = str(row.get("folder_name") or "MindBubble Backups")
+        if not search_all:
+            folder_id, folder_name = self._ensure_backup_folder(token)
+            q = f"'{folder_id}' in parents and trashed=false and (mimeType='application/json' or name contains '.json')"
+        else:
+            q = "trashed=false and mimeType!='application/vnd.google-apps.folder' and (mimeType='application/json' or name contains '.json')"
+
+        params = urlencode({
+            "q": q,
+            "orderBy": "modifiedTime desc",
+            "pageSize": str(max(1, min(100, int(limit)))),
+            "fields": "files(id,name,size,modifiedTime,webViewLink,appProperties)",
+            "spaces": "drive",
+        })
+        res = self._http_json(f"{GDRIVE_FILES_URL}?{params}", headers={"Authorization": f"Bearer {token}"})
+        files = res.get("files") if isinstance(res, dict) and isinstance(res.get("files"), list) else []
+        return {"ok": True, "files": files, "folderId": folder_id, "folderName": folder_name}
+
+    @staticmethod
+    def _validate_file_id(file_id: str) -> str:
+        clean = str(file_id or "").strip()
+        if not GDRIVE_FILE_ID_RE.match(clean):
+            raise ValueError("无效的 Google Drive 文件 ID")
+        return clean
+
+    def download_backup(self, file_id: str) -> dict[str, Any]:
+        fid = self._validate_file_id(file_id)
+        token = self._ensure_access_token()
+        headers = {"Authorization": f"Bearer {token}"}
+        meta = self._http_json(
+            f"{GDRIVE_FILES_URL}/{quote(fid)}?fields=id,name,size,modifiedTime,webViewLink,appProperties",
+            headers=headers,
+        )
+        _status, raw = self._http_request(
+            f"{GDRIVE_FILES_URL}/{quote(fid)}?alt=media",
+            headers=headers,
+            timeout=60,
+        )
+        if len(raw) > MAX_BODY_BYTES:
+            raise OverflowError("Google Drive 备份文件超过 20 MB 限制")
+        parsed = json.loads(raw.decode("utf-8"))
+        if isinstance(parsed, dict) and parsed.get("format") == "mindbubble-backup" and isinstance(parsed.get("currentState"), dict):
+            ws = parsed["currentState"]
+            snaps = parsed.get("snapshots") if isinstance(parsed.get("snapshots"), list) else []
+            fmt = "v2-snapshot" if parsed.get("mode") == "snapshot" else "v2-full"
+        elif isinstance(parsed, dict) and isinstance(parsed.get("tasks"), list):
+            ws = parsed
+            snaps = []
+            fmt = "v1-workspace"
+        else:
+            raise ValueError("所选 Google Drive 文件不是有效的 MindBubble 备份格式")
+
+        summary = {
+            "format": fmt,
+            "tasks": len(ws.get("tasks") or []),
+            "galaxies": len(ws.get("galaxies") or (ws.get("prefs") or {}).get("galaxies") or []),
+            "manualLinks": len(ws.get("manualLinks") or []),
+            "clusters": len(ws.get("clusters") or []),
+            "snapshots": len(snaps),
+            "exportedAt": parsed.get("exportedAt"),
+        }
+        return {"ok": True, "file": meta, "summary": summary, "backup": parsed}
+
+    def import_from_drive(self, file_id: str, mode: str = "merge") -> dict[str, Any]:
+        downloaded = self.download_backup(file_id)
+        res = self.store.import_backup(downloaded["backup"], mode=mode)
+        return {"ok": True, "sourceFile": downloaded["file"], **res}
+
+    def delete_file(self, file_id: str) -> dict[str, Any]:
+        fid = self._validate_file_id(file_id)
+        token = self._ensure_access_token()
+        self._http_json(
+            f"{GDRIVE_FILES_URL}/{quote(fid)}?fields=id,trashed",
+            method="PATCH",
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json; charset=utf-8",
+            },
+            body=json.dumps({"trashed": True}).encode("utf-8"),
+        )
+        return {"ok": True, "fileId": fid}
+
+    def disconnect(self, origin: str = "http://localhost:8765") -> dict[str, Any]:
+        row = self.store.get_gdrive_row()
+        tok = str(row.get("refresh_token") or row.get("access_token") or "").strip()
+        if tok:
+            try:
+                self._http_request(
+                    GDRIVE_REVOKE_URL,
+                    method="POST",
+                    headers={"Content-Type": "application/x-www-form-urlencoded"},
+                    body=urlencode({"token": tok}).encode("utf-8"),
+                    timeout=10,
+                )
+            except Exception:
+                pass
+        self.store.update_gdrive_row(
+            access_token="",
+            refresh_token="",
+            token_expires_at=0,
+            account_email="",
+            account_name="",
+            folder_id="",
+        )
+        return self.get_status(origin)
+
+
+def make_handler(
+    store: MindBubbleStore,
+    agy_client: AgyClient,
+    gdrive_client: GoogleDriveClient | None = None,
+) -> type[BaseHTTPRequestHandler]:
+    gdrive = gdrive_client or GoogleDriveClient(store)
+    mcp_service = MindBubbleMcpService(MindBubbleBackend(store=store, agy_client=agy_client))
+    mcp_rpc = McpJsonRpcHandler(mcp_service)
+
     class MindBubbleHandler(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
+
+        @staticmethod
+        def _mcp_cors_headers() -> dict[str, str]:
+            return {
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type, Accept, Mcp-Session-Id, MCP-Protocol-Version",
+                "Access-Control-Expose-Headers": "Mcp-Session-Id, MCP-Protocol-Version",
+            }
+
+        def _send_empty(self, status: int, extra_headers: dict[str, str] | None = None) -> None:
+            self.send_response(status)
+            self.send_header("Content-Length", "0")
+            self.send_header("Cache-Control", "no-store")
+            if extra_headers:
+                for k, v in extra_headers.items():
+                    self.send_header(k, v)
+            self.end_headers()
+
+        def do_OPTIONS(self) -> None:
+            path = urlparse(self.path).path
+            if path == "/mcp":
+                self._send_empty(HTTPStatus.NO_CONTENT, self._mcp_cors_headers())
+                return
+            self._send_empty(HTTPStatus.NO_CONTENT)
+
+        def _request_origin(self) -> str:
+            proto = (self.headers.get("X-Forwarded-Proto") or "http").split(",")[0].strip() or "http"
+            host = (self.headers.get("Host") or "localhost:8765").strip()
+            return f"{proto}://{host}"
+
+        @staticmethod
+        def _parse_gdrive_file_id(path: str, prefix: str, suffix: str = "") -> str | None:
+            if not path.startswith(prefix) or (suffix and not path.endswith(suffix)):
+                return None
+            mid = path[len(prefix) : len(path) - len(suffix) if suffix else len(path)]
+            if mid and "/" not in mid and GDRIVE_FILE_ID_RE.match(mid):
+                return mid
+            return None
 
         def log_message(self, format: str, *args: Any) -> None:
             ts = time.strftime("%H:%M:%S")
@@ -1406,6 +2303,85 @@ def make_handler(store: MindBubbleStore, agy_client: AgyClient) -> type[BaseHTTP
                 )
                 return
 
+            if path == "/api/gdrive/status":
+                self._send_json(HTTPStatus.OK, gdrive.get_status(self._request_origin()))
+                return
+
+            if path == "/api/gdrive/auth/start":
+                try:
+                    self._send_json(HTTPStatus.OK, gdrive.start_auth(self._request_origin()))
+                except ValueError as exc:
+                    self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "error": str(exc)})
+                return
+
+            if path == "/api/gdrive/callback":
+                code = (qs.get("code") or [""])[0]
+                state_tok = (qs.get("state") or [""])[0]
+                err_param = (qs.get("error") or [""])[0]
+                try:
+                    res = gdrive.handle_callback(code=code, state=state_tok, error=err_param)
+                    payload_js = json.dumps({
+                        "type": "mindbubble-gdrive-auth",
+                        "ok": True,
+                        "accountEmail": res.get("accountEmail", ""),
+                        "accountName": res.get("accountName", ""),
+                    }, ensure_ascii=False)
+                    html = f"""<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8"><title>Google Drive 授权成功</title></head><body style="margin:0;padding:36px;background:#070d1c;color:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,sans-serif;text-align:center;"><h3>✓ Google Drive 授权成功</h3><p style="color:#94a3b8;">正在返回 MindBubble 设置页...</p><p><a href="/settings#backup" style="color:#38bdf8;">返回设置页</a></p><script>try{{if(window.opener){{window.opener.postMessage({payload_js},'*');window.close();}}else{{window.location.replace('/settings#backup');}}}}catch(e){{window.location.replace('/settings#backup');}}</script></body></html>"""
+                    self._send_bytes(HTTPStatus.OK, "text/html; charset=utf-8", html.encode("utf-8"))
+                except Exception as exc:
+                    payload_js = json.dumps({
+                        "type": "mindbubble-gdrive-auth",
+                        "ok": False,
+                        "error": str(exc),
+                    }, ensure_ascii=False)
+                    err_html = f"""<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8"><title>Google Drive 授权失败</title></head><body style="margin:0;padding:36px;background:#070d1c;color:#fda4af;font-family:-apple-system,BlinkMacSystemFont,sans-serif;text-align:center;"><h3>✕ Google Drive 授权失败</h3><p style="color:#cbd5e1;">{str(exc).replace('<','&lt;')}</p><p><a href="/settings#backup" style="color:#38bdf8;">返回设置页</a></p><script>try{{if(window.opener){{window.opener.postMessage({payload_js},'*');}}}}catch(e){{}}</script></body></html>"""
+                    self._send_bytes(HTTPStatus.BAD_REQUEST, "text/html; charset=utf-8", err_html.encode("utf-8"))
+                return
+
+            if path == "/api/gdrive/files":
+                search_all = (qs.get("all") or ["0"])[0] == "1"
+                limit_str = (qs.get("limit") or ["30"])[0]
+                limit = int(limit_str) if limit_str.isdigit() else 30
+                try:
+                    self._send_json(HTTPStatus.OK, gdrive.list_files(search_all=search_all, limit=limit))
+                except ValueError as exc:
+                    self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "error": str(exc)})
+                except Exception as exc:
+                    self._send_json(HTTPStatus.BAD_GATEWAY, {"ok": False, "error": str(exc)})
+                return
+
+            if path == "/api/mcp/info":
+                origin = self._request_origin()
+                stdio_entry = build_antigravity_mcp_entry(api_url=origin, db_path=store.db_path if hasattr(store, "db_path") else _MCP_DEFAULT_DB_PATH)
+                self._send_json(
+                    HTTPStatus.OK,
+                    {
+                        "ok": True,
+                        "serverName": "mindbubble",
+                        "protocolVersion": "2025-03-26",
+                        "streamableHttpUrl": f"{origin}/mcp",
+                        "antigravity": get_antigravity_registration_status(),
+                        "stdioConfig": {"mcpServers": {"mindbubble": stdio_entry}},
+                        "httpConfig": {"mcpServers": {"mindbubble": {"url": f"{origin}/mcp"}}},
+                        "tools": [
+                            {"name": t["name"], "description": t["description"], "annotations": t.get("annotations", {})}
+                            for t in MCP_TOOL_SPECS
+                        ],
+                        "resources": MCP_RESOURCE_SPECS,
+                        "prompts": MCP_PROMPT_SPECS,
+                    },
+                )
+                return
+
+            if path == "/mcp":
+                hdrs = {"Allow": "POST, DELETE, OPTIONS", **self._mcp_cors_headers()}
+                self._send_json(
+                    HTTPStatus.METHOD_NOT_ALLOWED,
+                    {"jsonrpc": "2.0", "id": None, "error": {"code": -32000, "message": "Use POST /mcp for JSON-RPC requests"}},
+                    hdrs,
+                )
+                return
+
             self._send_json(HTTPStatus.NOT_FOUND, {"error": "Not found"})
 
         def _handle_state_upsert(self) -> None:
@@ -1433,6 +2409,13 @@ def make_handler(store: MindBubbleStore, agy_client: AgyClient) -> type[BaseHTTP
                     self._send_json(HTTPStatus.OK, store.update_config(payload))
                 except (ValueError, json.JSONDecodeError, UnicodeDecodeError) as exc:
                     self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+                return
+            if path == "/api/gdrive/config":
+                try:
+                    payload = self._read_json_body()
+                    self._send_json(HTTPStatus.OK, gdrive.save_config(payload, origin=self._request_origin()))
+                except (ValueError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+                    self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "error": str(exc)})
                 return
             self._send_json(HTTPStatus.NOT_FOUND, {"error": "Not found"})
 
@@ -1473,6 +2456,52 @@ def make_handler(store: MindBubbleStore, agy_client: AgyClient) -> type[BaseHTTP
                     self._send_json(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, {"error": str(exc)})
                 except (ValueError, json.JSONDecodeError, UnicodeDecodeError) as exc:
                     self._send_json(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+                return
+
+            if path == "/api/gdrive/disconnect":
+                self._send_json(HTTPStatus.OK, gdrive.disconnect(origin=self._request_origin()))
+                return
+
+            if path == "/api/gdrive/backup":
+                try:
+                    payload = self._read_json_body() if self.headers.get("Content-Length") else {}
+                    inc = bool(payload.get("includeHistory", True)) if isinstance(payload, dict) else True
+                    cname = str(payload.get("fileName") or "") if isinstance(payload, dict) else ""
+                    self._send_json(HTTPStatus.OK, gdrive.upload_backup(include_history=inc, custom_name=cname))
+                except ValueError as exc:
+                    self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "error": str(exc)})
+                except Exception as exc:
+                    self._send_json(HTTPStatus.BAD_GATEWAY, {"ok": False, "error": str(exc)})
+                return
+
+            gd_preview_id = self._parse_gdrive_file_id(path, "/api/gdrive/files/", "/preview")
+            if gd_preview_id is not None:
+                try:
+                    self._send_json(HTTPStatus.OK, gdrive.download_backup(gd_preview_id))
+                except OverflowError as exc:
+                    self._send_json(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, {"ok": False, "error": str(exc)})
+                except ValueError as exc:
+                    self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "error": str(exc)})
+                except Exception as exc:
+                    self._send_json(HTTPStatus.BAD_GATEWAY, {"ok": False, "error": str(exc)})
+                return
+
+            gd_import_id = self._parse_gdrive_file_id(path, "/api/gdrive/files/", "/import")
+            if gd_import_id is not None:
+                try:
+                    payload = self._read_json_body() if self.headers.get("Content-Length") else {}
+                    mode = str(payload.get("mode") or "merge") if isinstance(payload, dict) else "merge"
+                    self._send_json(HTTPStatus.OK, gdrive.import_from_drive(gd_import_id, mode=mode))
+                except OverflowError as exc:
+                    self._send_json(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, {"ok": False, "error": str(exc)})
+                except ValueError as exc:
+                    self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "error": str(exc)})
+                except Exception as exc:
+                    self._send_json(HTTPStatus.BAD_GATEWAY, {"ok": False, "error": str(exc)})
+                return
+
+            if path.startswith("/api/gdrive/files/") and (path.endswith("/preview") or path.endswith("/import")):
+                self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "error": "无效的 Google Drive 文件 ID"})
                 return
 
             if path == "/api/storage/vacuum":
@@ -1516,6 +2545,58 @@ def make_handler(store: MindBubbleStore, agy_client: AgyClient) -> type[BaseHTTP
                     self._send_json(HTTPStatus.BAD_GATEWAY, {"ok": False, "error": str(exc)})
                 return
 
+            if path == "/api/ai/critical-path":
+                try:
+                    payload = self._read_json_body()
+                    if not isinstance(payload, dict):
+                        raise ValueError("Payload must be a JSON object")
+                    res = agy_client.generate_critical_path(
+                        tasks=payload.get("tasks"),
+                        manual_links=payload.get("manualLinks"),
+                        ai_links=payload.get("aiLinks"),
+                        target_task_id=payload.get("targetTaskId"),
+                        model=payload.get("model"),
+                    )
+                    self._send_json(HTTPStatus.OK, res)
+                except ValueError as exc:
+                    self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "error": str(exc)})
+                except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+                    self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "error": str(exc)})
+                except Exception as exc:
+                    self._send_json(HTTPStatus.BAD_GATEWAY, {"ok": False, "error": str(exc)})
+                return
+
+            if path == "/api/mcp/install-antigravity":
+                try:
+                    origin = self._request_origin()
+                    db_p = store.db_path if hasattr(store, "db_path") else _MCP_DEFAULT_DB_PATH
+                    res = install_into_antigravity(api_url=origin, db_path=db_p)
+                    self._send_json(HTTPStatus.OK, res)
+                except Exception as exc:
+                    self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "error": str(exc)})
+                return
+
+            if path == "/mcp":
+                cors = self._mcp_cors_headers()
+                try:
+                    payload = self._read_json_body()
+                except OverflowError as exc:
+                    self._send_json(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, {"jsonrpc": "2.0", "id": None, "error": {"code": -32000, "message": str(exc)}}, cors)
+                    return
+                except (ValueError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+                    self._send_json(HTTPStatus.BAD_REQUEST, {"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": str(exc)}}, cors)
+                    return
+                status, body_obj, rpc_headers = mcp_rpc.handle_request(
+                    payload,
+                    session_id=self.headers.get("Mcp-Session-Id"),
+                )
+                merged_headers = {**cors, **rpc_headers}
+                if body_obj is None:
+                    self._send_empty(status, merged_headers)
+                else:
+                    self._send_json(status, body_obj, merged_headers)
+                return
+
             self._send_json(HTTPStatus.NOT_FOUND, {"error": "Not found"})
 
         def do_DELETE(self) -> None:
@@ -1545,6 +2626,25 @@ def make_handler(store: MindBubbleStore, agy_client: AgyClient) -> type[BaseHTTP
                 self._send_json(HTTPStatus.OK, {"ok": True, "deletedId": snap_id})
                 return
 
+            gd_del_id = self._parse_gdrive_file_id(path, "/api/gdrive/files/")
+            if gd_del_id is not None:
+                try:
+                    self._send_json(HTTPStatus.OK, gdrive.delete_file(gd_del_id))
+                except ValueError as exc:
+                    self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "error": str(exc)})
+                except Exception as exc:
+                    self._send_json(HTTPStatus.BAD_GATEWAY, {"ok": False, "error": str(exc)})
+                return
+
+            if path.startswith("/api/gdrive/files/"):
+                self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "error": "无效的 Google Drive 文件 ID"})
+                return
+
+            if path == "/mcp":
+                mcp_rpc.close_session(self.headers.get("Mcp-Session-Id"))
+                self._send_empty(HTTPStatus.NO_CONTENT, self._mcp_cors_headers())
+                return
+
             self._send_json(HTTPStatus.NOT_FOUND, {"error": "Not found"})
 
     return MindBubbleHandler
@@ -1562,10 +2662,11 @@ def main() -> None:
     args = parse_args()
     store = MindBubbleStore(args.db)
     agy_client = AgyClient()
+    gdrive_client = GoogleDriveClient(store)
     threading.Thread(target=agy_client.prewarm, args=(DEFAULT_AGY_MODEL,), daemon=True).start()
 
     ThreadingHTTPServer.allow_reuse_address = True
-    server = ThreadingHTTPServer((args.host, args.port), make_handler(store, agy_client))
+    server = ThreadingHTTPServer((args.host, args.port), make_handler(store, agy_client, gdrive_client))
 
     def shutdown_handler(signum: int, _frame: Any) -> None:
         threading.Thread(target=server.shutdown, daemon=True).start()

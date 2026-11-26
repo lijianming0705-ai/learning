@@ -164,6 +164,32 @@
       color: #ffe4e6;
     }
 
+    .glass-btn.active {
+      background: linear-gradient(135deg, rgba(56, 189, 248, 0.24), rgba(167, 139, 250, 0.22));
+      border-color: rgba(56, 189, 248, 0.58);
+      color: #f8fafc;
+      font-weight: 600;
+    }
+
+    .glass-btn.ai-accent {
+      border-color: rgba(167, 139, 250, 0.55);
+      background: linear-gradient(135deg, rgba(139, 92, 246, 0.34), rgba(56, 189, 248, 0.32));
+      color: #f8fafc;
+      font-weight: 600;
+    }
+
+    .glass-btn.ai-accent:hover {
+      background: linear-gradient(135deg, rgba(167, 139, 250, 0.52), rgba(56, 189, 248, 0.48));
+      border-color: rgba(196, 181, 253, 0.85);
+      box-shadow: 0 0 18px rgba(139, 92, 246, 0.28);
+    }
+
+    .glass-card.card-focus-flash {
+      border-color: rgba(56, 189, 248, 0.75);
+      box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.22), var(--shadow-md);
+      transition: border-color 0.25s ease, box-shadow 0.25s ease;
+    }
+
     /* Main 2-Column Workspace */
     .workspace-grid {
       display: grid;
@@ -590,6 +616,215 @@
     ::-webkit-scrollbar { width: 5px; height: 5px; }
     ::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, 0.28); border-radius: 999px; }
 
+    .glass-btn.emerald {
+      border-color: rgba(52, 211, 153, 0.5);
+      background: rgba(16, 185, 129, 0.16);
+      color: #a7f3d0;
+      font-weight: 600;
+    }
+
+    .glass-btn.emerald:hover {
+      background: rgba(16, 185, 129, 0.28);
+      border-color: rgba(52, 211, 153, 0.85);
+      color: #ecfdf5;
+    }
+
+    .glass-btn:disabled {
+      opacity: 0.52;
+      cursor: not-allowed;
+    }
+
+    /* Google Drive Backup & Auth Card */
+    .gdrive-card {
+      border-color: rgba(56, 189, 248, 0.28);
+      background: linear-gradient(155deg, rgba(12, 22, 42, 0.86), rgba(14, 24, 48, 0.8));
+    }
+
+    .gdrive-status-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+      padding: 10px 12px;
+      border-radius: 13px;
+      background: rgba(8, 14, 28, 0.68);
+      border: 1px solid rgba(148, 163, 184, 0.18);
+    }
+
+    .gdrive-account-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 12.5px;
+      font-weight: 600;
+      color: #cbd5e1;
+    }
+
+    .gdrive-account-badge.connected {
+      color: #6ee7b7;
+    }
+
+    .gdrive-actions-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .gdrive-config-box {
+      display: none;
+      flex-direction: column;
+      gap: 12px;
+      padding: 13px 14px;
+      border-radius: 14px;
+      background: rgba(8, 14, 28, 0.72);
+      border: 1px solid rgba(56, 189, 248, 0.24);
+    }
+
+    .gdrive-config-box.open {
+      display: flex;
+    }
+
+    .gdrive-guide-box {
+      padding: 10px 12px;
+      border-radius: 11px;
+      background: rgba(15, 23, 42, 0.55);
+      border: 1px solid rgba(148, 163, 184, 0.16);
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .gdrive-guide-box summary {
+      cursor: pointer;
+      color: #bae6fd;
+      font-weight: 600;
+      user-select: none;
+    }
+
+    .gdrive-uri-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 6px;
+      flex-wrap: wrap;
+    }
+
+    .gdrive-uri-code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 11.5px;
+      padding: 4px 8px;
+      border-radius: 8px;
+      background: rgba(2, 6, 23, 0.65);
+      border: 1px solid rgba(148, 163, 184, 0.22);
+      color: #e0f2fe;
+      word-break: break-all;
+    }
+
+    .gdrive-files-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-height: 310px;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+
+    .gdrive-file-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: rgba(9, 15, 30, 0.68);
+      border: 1px solid rgba(148, 163, 184, 0.16);
+      flex-wrap: wrap;
+    }
+
+    .gdrive-file-row:hover {
+      border-color: rgba(125, 211, 252, 0.42);
+      background: rgba(15, 26, 48, 0.78);
+    }
+
+    .gdrive-file-info {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      min-width: 220px;
+      flex: 1;
+    }
+
+    .gdrive-file-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: #f8fafc;
+      word-break: break-word;
+    }
+
+    .gdrive-file-meta {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .mcp-code-box {
+      margin: 0;
+      padding: 12px 14px;
+      border-radius: 12px;
+      background: rgba(7, 13, 28, 0.86);
+      border: 1px solid rgba(148, 163, 184, 0.22);
+      color: #bae6fd;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 12px;
+      line-height: 1.55;
+      overflow-x: auto;
+      white-space: pre;
+    }
+
+    .mcp-tools-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 10px;
+    }
+
+    .mcp-tool-card {
+      padding: 11px 13px;
+      border-radius: 12px;
+      background: rgba(9, 15, 30, 0.68);
+      border: 1px solid rgba(148, 163, 184, 0.16);
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .mcp-tool-name {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 12.5px;
+      font-weight: 600;
+      color: #7dd3fc;
+    }
+
+    .mcp-tool-badge {
+      font-size: 10.5px;
+      padding: 2px 7px;
+      border-radius: 999px;
+      background: rgba(56, 189, 248, 0.14);
+      border: 1px solid rgba(56, 189, 248, 0.32);
+      color: #bae6fd;
+      white-space: nowrap;
+    }
+
+    .mcp-tool-badge.write {
+      background: rgba(167, 139, 250, 0.16);
+      border-color: rgba(167, 139, 250, 0.35);
+      color: #ddd6fe;
+    }
+
     @media (max-width: 960px) {
       .workspace-grid { grid-template-columns: 1fr; }
       .side-nav { position: static; flex-direction: row; flex-wrap: wrap; }
@@ -607,10 +842,12 @@
         <div class="brand-orb" aria-hidden="true"></div>
         <div>
           <div class="header-title">MindBubble · 设置中心与时光机</div>
-          <div class="header-sub">Time Machine 历史快照恢复 · 备份导出导入 · 后台 SQLite 存储管理</div>
+          <div class="header-sub">Time Machine 历史快照恢复 · 备份导出导入 · AI 引擎设置 · 后台 SQLite 存储管理</div>
         </div>
       </div>
       <div class="header-right">
+        <button class="glass-btn" id="header-ai-settings-btn" type="button" title="打开 AI 语义聚类引擎设置">⚙ AI 设置</button>
+        <button class="glass-btn emerald" id="header-gdrive-quick-btn" type="button" style="display:none;" title="一键上传完整备份至 Google Drive">☁ 一键云备份</button>
         <span class="status-pill" id="header-status-pill">连接中...</span>
       </div>
     </header>
@@ -620,7 +857,8 @@
         <button class="nav-btn active" type="button" data-tab="timemachine">⏳ 时光机恢复 (Time Machine)</button>
         <button class="nav-btn" type="button" data-tab="backup">📦 备份导出与导入</button>
         <button class="nav-btn" type="button" data-tab="storage">💾 后台存储与策略</button>
-        <button class="nav-btn" type="button" data-tab="prefs">✦ AI 与画布偏好</button>
+        <button class="nav-btn" type="button" data-tab="prefs">⚙ AI 设置与画布偏好</button>
+        <button class="nav-btn" type="button" data-tab="mcp">🔌 MCP 与 Antigravity</button>
       </nav>
 
       <main class="main-panel">
@@ -668,8 +906,121 @@
 
         <!-- Tab 2: Export & Import -->
         <section class="tab-pane" id="tab-backup">
+          <!-- Google Drive Cloud Backup & Auth -->
+          <div class="glass-card gdrive-card" id="gdrive-card">
+            <div class="card-title-row">
+              <div>
+                <div class="card-title">☁ Google Drive 云端备份与授权恢复</div>
+                <p class="hint-text">支持 Google Drive OAuth 授权、一键上传完整备份到云端文件夹，以及浏览选择云端备份文件预览并导入恢复。</p>
+              </div>
+              <div class="row-flex">
+                <button class="glass-btn" id="gdrive-toggle-config-btn" type="button">⚙ OAuth 授权配置</button>
+              </div>
+            </div>
+
+            <div class="gdrive-status-bar">
+              <div class="row-flex" style="gap:10px;">
+                <span class="gdrive-account-badge" id="gdrive-status-badge">○ 未连接 Google Drive</span>
+                <span class="hint-text" id="gdrive-mode-hint"></span>
+              </div>
+              <div class="row-flex">
+                <button class="glass-btn primary" id="gdrive-auth-btn" type="button">🔐 授权登录 Google Drive</button>
+                <button class="glass-btn danger" id="gdrive-disconnect-btn" type="button" style="display:none;">断开授权</button>
+              </div>
+            </div>
+
+            <div class="gdrive-actions-bar" id="gdrive-backup-actions">
+              <div class="row-flex">
+                <button class="glass-btn emerald" id="gdrive-upload-full-btn" type="button" disabled>☁ 一键上传完整备份包至 Drive</button>
+                <button class="glass-btn" id="gdrive-upload-ws-btn" type="button" disabled>☁ 上传当前工作区至 Drive</button>
+              </div>
+              <span class="hint-text" id="gdrive-last-backup-info">尚未记录云端上传备份</span>
+            </div>
+
+            <div class="gdrive-config-box" id="gdrive-config-panel">
+              <div class="card-title-row">
+                <span class="field-label" style="font-size:13px;color:#e0f2fe;">Google OAuth 2.0 授权配置</span>
+                <div class="row-flex">
+                  <button class="glass-btn" id="gdrive-import-cred-btn" type="button">📄 导入 credentials.json</button>
+                  <input type="file" id="gdrive-cred-file" accept=".json,application/json" hidden />
+                </div>
+              </div>
+
+              <div class="form-grid">
+                <div class="field">
+                  <label class="field-label" for="gdrive-auth-mode">授权运行模式</label>
+                  <select class="glass-select" id="gdrive-auth-mode">
+                    <option value="backend">后台 OAuth 2.0 持久化（推荐 · 自动刷新令牌）</option>
+                    <option value="browser">浏览器 GIS 授权（仅需 Client ID · 免重启即用）</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label class="field-label" for="gdrive-folder-name">云端备份文件夹名称</label>
+                  <input class="glass-input" id="gdrive-folder-name" type="text" value="MindBubble Backups" placeholder="MindBubble Backups" />
+                </div>
+              </div>
+
+              <div class="form-grid">
+                <div class="field">
+                  <label class="field-label" for="gdrive-client-id">Google OAuth Client ID</label>
+                  <input class="glass-input" id="gdrive-client-id" type="text" placeholder="xxx.apps.googleusercontent.com" />
+                </div>
+                <div class="field" id="gdrive-secret-field">
+                  <label class="field-label" for="gdrive-client-secret">Google OAuth Client Secret <span class="hint-text" id="gdrive-secret-hint"></span></label>
+                  <input class="glass-input" id="gdrive-client-secret" type="password" placeholder="GOCSPX-...（已保存时留空保持不变）" />
+                </div>
+              </div>
+
+              <label class="check-row">
+                <input type="checkbox" id="gdrive-scope-readonly" />
+                <span>同时允许浏览并导入非本应用上传的 Google Drive 历史备份文件（<code>drive.readonly</code>）</span>
+              </label>
+
+              <div class="row-flex" style="justify-content:space-between;">
+                <button class="glass-btn primary" id="gdrive-save-config-btn" type="button">✓ 保存 OAuth 配置</button>
+                <span class="hint-text">Client Secret 与令牌仅保存在本地 SQLite；浏览器 GIS 模式仅存本地缓存</span>
+              </div>
+
+              <details class="gdrive-guide-box">
+                <summary>如何获取 Google Cloud OAuth 凭据（3 步快速指引）</summary>
+                <div style="margin-top:8px;line-height:1.6;">
+                  <div>1. 前往 <strong>Google Cloud Console → API 与服务 → 凭据</strong>，启用 <strong>Google Drive API</strong>，创建「<strong>OAuth 客户端 ID（Web 应用）</strong>」。</div>
+                  <div>2. 根据所选模式添加下方来源或重定向 URI：</div>
+                  <div class="gdrive-uri-row">
+                    <span>已获授权的 JavaScript 来源 (GIS 必选):</span>
+                    <code class="gdrive-uri-code" id="gdrive-js-origin"></code>
+                    <button class="pill-btn" id="gdrive-copy-origin-btn" type="button">复制</button>
+                  </div>
+                  <div class="gdrive-uri-row">
+                    <span>已获授权的重定向 URI (后台模式必选):</span>
+                    <code class="gdrive-uri-code" id="gdrive-redirect-uri"></code>
+                    <button class="pill-btn" id="gdrive-copy-redirect-btn" type="button">复制</button>
+                  </div>
+                  <div style="margin-top:6px;">3. 将获取到的 <code>Client ID</code> / <code>Client Secret</code> 填入上方，或直接导入下载的 <code>credentials.json</code> 并点击「授权登录」。</div>
+                </div>
+              </details>
+            </div>
+
+            <div id="gdrive-files-section" style="display:flex;flex-direction:column;gap:8px;padding-top:4px;border-top:1px solid rgba(148,163,184,0.14);">
+              <div class="card-title-row">
+                <span class="field-label" style="font-size:13px;">📂 Google Drive 云端备份文件选择与导入</span>
+                <div class="row-flex">
+                  <label class="check-row" style="font-size:12px;color:var(--text-muted);">
+                    <input type="checkbox" id="gdrive-search-all-chk" />
+                    <span>显示所有可访问 JSON</span>
+                  </label>
+                  <input class="glass-input" id="gdrive-file-search" type="text" placeholder="搜索云端文件名..." style="width:170px;padding:6px 10px;font-size:12px;" />
+                  <button class="glass-btn" id="gdrive-refresh-files-btn" type="button">↻ 刷新云端列表</button>
+                </div>
+              </div>
+              <div class="gdrive-files-list" id="gdrive-files-list">
+                <div class="hint-text">完成 Google Drive 授权后，这里将自动列出云端备份文件供选择预览或恢复。</div>
+              </div>
+            </div>
+          </div>
+
           <div class="glass-card">
-            <div class="card-title">↓ 备份导出</div>
+            <div class="card-title">↓ 本地备份导出</div>
             <p class="hint-text">支持导出包含完整 Time Machine 历史快照的归档文件（v2 格式），或仅导出当前工作区气泡数据用于轻量迁移。</p>
             <div class="export-grid">
               <div class="metric-box" style="gap:10px;">
@@ -777,9 +1128,9 @@
 
         <!-- Tab 4: AI & Canvas Preferences -->
         <section class="tab-pane" id="tab-prefs">
-          <div class="glass-card">
-            <div class="card-title">✦ AI 语义聚类与 3D 画布默认偏好</div>
-            <p class="hint-text">这些设置会实时同步到后台 SQLite；API Key 仅保存在当前浏览器的 localStorage，不会上传至后台数据库。</p>
+          <div class="glass-card" id="ai-settings-card">
+            <div class="card-title">⚙ AI 语义聚类引擎设置</div>
+            <p class="hint-text">配置 MindBubble 语义聚类与星群命名的 AI 引擎；设置会实时同步到后台 SQLite，API Key 仅保存在当前浏览器 localStorage，不会上传至后台数据库。</p>
             <div class="form-grid">
               <div class="field">
                 <label class="field-label" for="pref-ai-mode">聚类引擎模式</label>
@@ -799,6 +1150,12 @@
                 </select>
               </div>
             </div>
+            <p class="hint-text" id="pref-agy-hint">
+              默认调用本机已登录的 <code>agy</code> (`antigravity-cli`) 暖会话进行中文星系命名与深度语义聚类，免配置 API Key；若离线或不可用将自动回退内置离线引擎。
+            </p>
+            <p class="hint-text" id="pref-builtin-hint" style="display:none;">
+              内置离线引擎结合中英文领域语义向量、TF-IDF 字符双字特征与手动连线凝聚度，零延迟完成聚类与星群命名，无需任何外部服务。
+            </p>
             <div id="pref-llm-box" style="display:none;flex-direction:column;gap:12px;">
               <div class="form-grid">
                 <div class="field">
@@ -821,9 +1178,18 @@
                 <label class="field-label" for="pref-llm-key">API Key（仅保存在本地浏览器 localStorage）</label>
                 <input class="glass-input" id="pref-llm-key" type="password" placeholder="粘贴你的 API Key..." />
               </div>
+              <p class="hint-text" id="pref-llm-hint">若外部 API 请求失败或受跨域限制，将自动平滑回退至内置语义 AI 引擎。</p>
             </div>
+            <div class="row-flex">
+              <button class="glass-btn primary" id="save-ai-settings-btn" type="button">保存 AI 设置</button>
+              <button class="glass-btn ai-accent" id="save-and-run-ai-btn" type="button">✦ 保存并返回立即聚类</button>
+            </div>
+          </div>
 
-            <div class="form-grid" style="padding-top:6px;border-top:1px solid rgba(148,163,184,0.14);">
+          <div class="glass-card" id="canvas-prefs-card">
+            <div class="card-title">🎨 3D 画布与默认筛选偏好</div>
+            <p class="hint-text">配置打开 MindBubble 3D 气泡工作台时的默认视图模式、连线显示及启动默认筛选标签。</p>
+            <div class="form-grid">
               <div class="field">
                 <label class="field-label" for="pref-view-mode">默认 3D 视图模式</label>
                 <select class="glass-select" id="pref-view-mode">
@@ -850,8 +1216,62 @@
             </div>
 
             <div>
-              <button class="glass-btn primary" id="save-prefs-btn" type="button">保存 AI 与画布偏好</button>
+              <button class="glass-btn primary" id="save-prefs-btn" type="button">保存画布与全部偏好</button>
             </div>
+          </div>
+        </section>
+
+        <!-- Tab 5: MCP & Antigravity Integration -->
+        <section class="tab-pane" id="tab-mcp">
+          <div class="glass-card" id="mcp-status-card">
+            <div class="card-title-row">
+              <div>
+                <div class="card-title">🔌 MCP 服务能力与 Antigravity 默认内置</div>
+                <p class="hint-text">MindBubble 原生提供 Stdio MCP 与 Streamable HTTP（<code>/mcp</code>）协议，支持在 Antigravity 中直接读写气泡、星系、Top-3、连线、关键路径与时光机快照。</p>
+              </div>
+              <div class="row-flex">
+                <button class="glass-btn" id="mcp-refresh-btn" type="button">↻ 刷新状态</button>
+                <button class="glass-btn primary" id="mcp-install-agy-btn" type="button">⚡ 同步内置到 Antigravity</button>
+              </div>
+            </div>
+
+            <div class="gdrive-status-bar">
+              <div class="row-flex" style="gap:10px;flex-wrap:wrap;">
+                <span class="gdrive-account-badge" id="mcp-agy-badge">○ 检测 Antigravity 注册状态...</span>
+                <span class="hint-text" id="mcp-http-hint"></span>
+              </div>
+              <span class="hint-text" id="mcp-config-path">配置文件：~/.gemini/config/mcp_config.json</span>
+            </div>
+          </div>
+
+          <div class="glass-card" id="mcp-config-card">
+            <div class="card-title">⚙ 连接配置片段（Antigravity Stdio / Streamable HTTP）</div>
+            <div class="form-grid">
+              <div class="field">
+                <div class="card-title-row">
+                  <label class="field-label">Antigravity 全局 Stdio 配置（推荐）</label>
+                  <button class="pill-btn" id="mcp-copy-stdio-btn" type="button">复制 JSON</button>
+                </div>
+                <pre class="mcp-code-box" id="mcp-stdio-snippet"></pre>
+              </div>
+              <div class="field">
+                <div class="card-title-row">
+                  <label class="field-label">Streamable HTTP（/mcp）配置</label>
+                  <button class="pill-btn" id="mcp-copy-http-btn" type="button">复制 JSON</button>
+                </div>
+                <pre class="mcp-code-box" id="mcp-http-snippet"></pre>
+              </div>
+            </div>
+          </div>
+
+          <div class="glass-card" id="mcp-tools-card">
+            <div class="card-title-row">
+              <div>
+                <div class="card-title">🛠 内置 MCP Tools / Resources / Prompts 列表</div>
+                <p class="hint-text" id="mcp-cap-summary">加载中...</p>
+              </div>
+            </div>
+            <div class="mcp-tools-grid" id="mcp-tools-grid"></div>
           </div>
         </section>
       </main>
@@ -866,6 +1286,7 @@
 
       const LLM_KEY_STORAGE = 'mindbubble_llm_key_v1';
       const STORAGE_KEY = 'mindbubble_todo_v1';
+      const GDRIVE_GIS_STORAGE = 'mindbubble_gdrive_gis_v1';
 
       const settingsState = {
         snapshots: [],
@@ -875,7 +1296,24 @@
         searchQuery: '',
         storageInfo: null,
         liveState: null,
-        pendingImportData: null
+        pendingImportData: null,
+        gdrive: {
+          backendAvailable: false,
+          authMode: 'backend',
+          modeUserSet: false,
+          status: null,
+          gisConfig: { clientId: '', folderName: 'MindBubble Backups', scopeMode: 'drive.file' },
+          gisAccessToken: '',
+          gisTokenExpiresAt: 0,
+          gisAccount: { email: '', name: '' },
+          gisFolderId: '',
+          gisLastBackupAt: 0,
+          gisLastBackupFile: '',
+          files: [],
+          fileSearch: '',
+          searchAll: false,
+          busy: false
+        }
       };
 
       const escapeHtml = (str) => String(str ?? '').replace(/[&<>"']/g, ch => ({
@@ -920,7 +1358,13 @@
 
       // ---------- Data Loaders ----------
       async function refreshAll() {
-        await Promise.all([loadStorageInfo(), loadSnapshots(), loadLiveState()]);
+        await Promise.all([
+          loadStorageInfo(),
+          loadSnapshots(),
+          loadLiveState(),
+          loadGdriveStatus(),
+          loadMcpInfo().catch(() => {})
+        ]);
       }
 
       async function loadStorageInfo() {
@@ -961,8 +1405,14 @@
       }
 
       function syncPrefModeUi(mode) {
-        document.getElementById('pref-agy-box').style.display = mode === 'agy' ? 'flex' : 'none';
-        document.getElementById('pref-llm-box').style.display = mode === 'llm' ? 'flex' : 'none';
+        const agyBox = document.getElementById('pref-agy-box');
+        const agyHint = document.getElementById('pref-agy-hint');
+        const builtinHint = document.getElementById('pref-builtin-hint');
+        const llmBox = document.getElementById('pref-llm-box');
+        if (agyBox) agyBox.style.display = mode === 'agy' ? 'flex' : 'none';
+        if (agyHint) agyHint.style.display = mode === 'agy' ? 'block' : 'none';
+        if (builtinHint) builtinHint.style.display = mode === 'builtin' ? 'block' : 'none';
+        if (llmBox) llmBox.style.display = mode === 'llm' ? 'flex' : 'none';
       }
 
       async function loadAgyModels(selectedModel) {
@@ -1228,17 +1678,51 @@
         }
       }
 
+      function activateTab(tabName, { scrollToAi = false } = {}) {
+        const normalized = (tabName === 'ai' || tabName === 'ai-settings') ? 'prefs' : tabName;
+        if (!['timemachine', 'backup', 'storage', 'prefs', 'mcp'].includes(normalized)) return;
+        document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === normalized));
+        document.querySelectorAll('.tab-pane').forEach(p => p.classList.toggle('active', p.id === `tab-${normalized}`));
+        const headerAiBtn = document.getElementById('header-ai-settings-btn');
+        if (headerAiBtn) headerAiBtn.classList.toggle('active', normalized === 'prefs');
+        try {
+          history.replaceState(null, '', `#${normalized}`);
+        } catch (_) {}
+        if (scrollToAi && normalized === 'prefs') {
+          const aiCard = document.getElementById('ai-settings-card');
+          if (aiCard) {
+            aiCard.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+            aiCard.classList.add('card-focus-flash');
+            setTimeout(() => aiCard.classList.remove('card-focus-flash'), 1100);
+          }
+        }
+      }
+
       // ---------- Events ----------
       function bindEvents() {
         // Tab switching
         document.querySelectorAll('.nav-btn').forEach(btn => {
           btn.addEventListener('click', () => {
-            const tab = btn.dataset.tab;
-            document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b === btn));
-            document.querySelectorAll('.tab-pane').forEach(p => p.classList.toggle('active', p.id === `tab-${tab}`));
-            history.replaceState(null, '', `#${tab}`);
+            activateTab(btn.dataset.tab);
           });
         });
+        document.getElementById('header-ai-settings-btn')?.addEventListener('click', () => {
+          activateTab('prefs', { scrollToAi: true });
+        });
+        document.getElementById('mcp-refresh-btn')?.addEventListener('click', () => loadMcpInfo());
+        document.getElementById('mcp-install-agy-btn')?.addEventListener('click', () => syncMcpToAntigravity());
+        const copyMcpCode = async (elId, label) => {
+          const text = document.getElementById(elId)?.textContent || '';
+          if (!text) return;
+          try {
+            await navigator.clipboard?.writeText(text);
+            showToast(`已复制${label}`);
+          } catch (_) {
+            showToast(`${label}已生成`);
+          }
+        };
+        document.getElementById('mcp-copy-stdio-btn')?.addEventListener('click', () => copyMcpCode('mcp-stdio-snippet', ' Antigravity Stdio MCP 配置'));
+        document.getElementById('mcp-copy-http-btn')?.addEventListener('click', () => copyMcpCode('mcp-http-snippet', ' Streamable HTTP MCP 配置'));
 
         // Manual snapshot creation
         const createManual = async () => {
@@ -1403,8 +1887,16 @@
           }
         });
 
-        document.getElementById('save-prefs-btn').addEventListener('click', async () => {
-          const live = settingsState.liveState || { tasks: [], manualLinks: [], clusters: [], aiLinks: [], tagCatalog: [], prefs: {} };
+        async function savePrefsSettings({ reason = '更新 AI 与画布偏好', runAiClusterAfter = false } = {}) {
+          let live = settingsState.liveState || { tasks: [], manualLinks: [], clusters: [], aiLinks: [], tagCatalog: [], prefs: {} };
+          try {
+            const fresh = await apiJson('/api/state');
+            if (fresh && fresh.state && typeof fresh.state === 'object') {
+              live = fresh.state;
+              settingsState.liveState = fresh.state;
+            }
+          } catch (_) {}
+
           const apiKey = document.getElementById('pref-llm-key').value.trim();
           if (apiKey) localStorage.setItem(LLM_KEY_STORAGE, apiKey);
           else localStorage.removeItem(LLM_KEY_STORAGE);
@@ -1447,55 +1939,744 @@
               method: 'PUT',
               headers: {
                 'Content-Type': 'application/json',
-                'X-MindBubble-Reason': encodeURIComponent('更新 AI 与画布偏好')
+                'X-MindBubble-Reason': encodeURIComponent(reason)
               },
               body: JSON.stringify(nextPayload)
             });
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(nextPayload));
-            showToast('AI 与画布偏好设置已保存并同步');
+            try {
+              localStorage.setItem(STORAGE_KEY, JSON.stringify(nextPayload));
+            } catch (_) {}
+            if (runAiClusterAfter) {
+              window.location.href = '/?runAiCluster=1';
+              return;
+            }
+            showToast(reason === '更新 AI 引擎设置' ? 'AI 引擎设置已保存并同步' : 'AI 与画布偏好设置已保存并同步');
             await refreshAll();
           } catch (err) {
             showToast(`保存失败：${err.message}`);
           }
+        }
+
+        document.getElementById('save-ai-settings-btn')?.addEventListener('click', () => {
+          savePrefsSettings({ reason: '更新 AI 引擎设置', runAiClusterAfter: false });
         });
+        document.getElementById('save-and-run-ai-btn')?.addEventListener('click', () => {
+          savePrefsSettings({ reason: '更新 AI 引擎设置', runAiClusterAfter: true });
+        });
+        document.getElementById('save-prefs-btn').addEventListener('click', () => {
+          savePrefsSettings({ reason: '更新 AI 与画布偏好', runAiClusterAfter: false });
+        });
+
+        // Google Drive OAuth, Upload & Restore events
+        window.addEventListener('message', async (e) => {
+          if (e.data && e.data.type === 'mindbubble-gdrive-auth') {
+            if (e.data.ok) {
+              showToast(`Google Drive 授权成功：${e.data.accountEmail || e.data.accountName || '已连接'}`);
+              await loadGdriveStatus();
+              await loadGdriveFiles();
+            } else if (e.data.error) {
+              showToast(`Google Drive 授权失败：${e.data.error}`);
+            }
+          }
+        });
+
+        document.getElementById('gdrive-toggle-config-btn')?.addEventListener('click', () => {
+          document.getElementById('gdrive-config-panel')?.classList.toggle('open');
+        });
+        document.getElementById('gdrive-auth-mode')?.addEventListener('change', e => {
+          settingsState.gdrive.modeUserSet = true;
+          settingsState.gdrive.authMode = e.target.value === 'browser' ? 'browser' : 'backend';
+          saveGisConfigToStorage();
+          renderGdriveUi();
+        });
+        document.getElementById('gdrive-import-cred-btn')?.addEventListener('click', () => {
+          document.getElementById('gdrive-cred-file')?.click();
+        });
+        document.getElementById('gdrive-cred-file')?.addEventListener('change', async e => {
+          const file = e.target.files?.[0];
+          e.target.value = '';
+          if (!file) return;
+          try {
+            const text = await file.text();
+            const parsed = parseGoogleCredentialsJson(text);
+            document.getElementById('gdrive-client-id').value = parsed.clientId;
+            if (parsed.clientSecret) {
+              document.getElementById('gdrive-client-secret').value = parsed.clientSecret;
+            }
+            settingsState.gdrive.pendingCredentialsJson = text;
+            showToast(`已读取凭据文件（Client ID: ${parsed.clientId.slice(0, 18)}...），请点击「保存 OAuth 配置」`);
+          } catch (err) {
+            showToast(`无法读取凭据 JSON：${err.message}`);
+          }
+        });
+
+        const copyGdriveUri = async (elId, label) => {
+          const text = document.getElementById(elId)?.textContent || '';
+          if (!text) return;
+          try {
+            await navigator.clipboard?.writeText(text);
+            showToast(`已复制${label}`);
+          } catch (_) {
+            showToast(`${label}：${text}`);
+          }
+        };
+        document.getElementById('gdrive-copy-origin-btn')?.addEventListener('click', () => copyGdriveUri('gdrive-js-origin', ' JavaScript 来源'));
+        document.getElementById('gdrive-copy-redirect-btn')?.addEventListener('click', () => copyGdriveUri('gdrive-redirect-uri', '重定向 URI'));
+
+        document.getElementById('gdrive-save-config-btn')?.addEventListener('click', () => saveGdriveConfig());
+        document.getElementById('gdrive-auth-btn')?.addEventListener('click', () => startGdriveAuth());
+        document.getElementById('gdrive-disconnect-btn')?.addEventListener('click', () => disconnectGdrive());
+        document.getElementById('gdrive-upload-full-btn')?.addEventListener('click', () => uploadBackupToGdrive(true));
+        document.getElementById('gdrive-upload-ws-btn')?.addEventListener('click', () => uploadBackupToGdrive(false));
+        document.getElementById('header-gdrive-quick-btn')?.addEventListener('click', () => uploadBackupToGdrive(true));
+        document.getElementById('gdrive-refresh-files-btn')?.addEventListener('click', () => loadGdriveFiles());
+        document.getElementById('gdrive-search-all-chk')?.addEventListener('change', e => {
+          settingsState.gdrive.searchAll = Boolean(e.target.checked);
+          if (isGdriveConnected()) loadGdriveFiles();
+        });
+        document.getElementById('gdrive-file-search')?.addEventListener('input', e => {
+          settingsState.gdrive.fileSearch = e.target.value || '';
+          renderGdriveFiles();
+        });
+      }
+
+      // ---------- Google Drive Cloud Backup & OAuth ----------
+      function parseGoogleCredentialsJson(raw) {
+        const obj = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        if (!obj || typeof obj !== 'object') {
+          throw new Error('凭据必须是 JSON 对象');
+        }
+        const section = obj.web || obj.installed || obj;
+        const clientId = String(section.client_id || '').trim();
+        const clientSecret = String(section.client_secret || '').trim();
+        if (!clientId) {
+          throw new Error('JSON 中缺少 client_id');
+        }
+        return { clientId, clientSecret };
+      }
+
+      function loadGisConfigFromStorage() {
+        try {
+          const raw = localStorage.getItem(GDRIVE_GIS_STORAGE);
+          if (!raw) return;
+          const parsed = JSON.parse(raw);
+          if (parsed && typeof parsed === 'object') {
+            settingsState.gdrive.gisConfig = {
+              clientId: String(parsed.clientId || ''),
+              folderName: String(parsed.folderName || 'MindBubble Backups') || 'MindBubble Backups',
+              scopeMode: parsed.scopeMode === 'drive.file+readonly' ? 'drive.file+readonly' : 'drive.file'
+            };
+            if (parsed.preferredMode === 'browser' || parsed.preferredMode === 'backend') {
+              settingsState.gdrive.authMode = parsed.preferredMode;
+              settingsState.gdrive.modeUserSet = Boolean(parsed.modeUserSet);
+            }
+            settingsState.gdrive.gisLastBackupAt = Number(parsed.lastBackupAt || 0);
+            settingsState.gdrive.gisLastBackupFile = String(parsed.lastBackupFile || '');
+          }
+        } catch (_) {}
+      }
+
+      function saveGisConfigToStorage() {
+        try {
+          localStorage.setItem(GDRIVE_GIS_STORAGE, JSON.stringify({
+            ...settingsState.gdrive.gisConfig,
+            preferredMode: settingsState.gdrive.authMode,
+            modeUserSet: settingsState.gdrive.modeUserSet,
+            lastBackupAt: settingsState.gdrive.gisLastBackupAt,
+            lastBackupFile: settingsState.gdrive.gisLastBackupFile
+          }));
+        } catch (_) {}
+      }
+
+      function isBackendGdriveActive() {
+        return settingsState.gdrive.backendAvailable && settingsState.gdrive.authMode === 'backend';
+      }
+
+      function isGdriveConnected() {
+        if (isBackendGdriveActive()) {
+          return Boolean(settingsState.gdrive.status?.connected);
+        }
+        return Boolean(settingsState.gdrive.gisAccessToken && Date.now() < settingsState.gdrive.gisTokenExpiresAt - 10000);
+      }
+
+      function isGdriveConfigured() {
+        if (isBackendGdriveActive()) {
+          return Boolean(settingsState.gdrive.status?.configured);
+        }
+        return Boolean(settingsState.gdrive.gisConfig?.clientId?.trim());
+      }
+
+      function renderGdriveUi() {
+        const gd = settingsState.gdrive;
+        const badge = document.getElementById('gdrive-status-badge');
+        const hint = document.getElementById('gdrive-mode-hint');
+        const authBtn = document.getElementById('gdrive-auth-btn');
+        const discBtn = document.getElementById('gdrive-disconnect-btn');
+        const upFullBtn = document.getElementById('gdrive-upload-full-btn');
+        const upWsBtn = document.getElementById('gdrive-upload-ws-btn');
+        const hdrQuickBtn = document.getElementById('header-gdrive-quick-btn');
+        const lastInfo = document.getElementById('gdrive-last-backup-info');
+        const modeSel = document.getElementById('gdrive-auth-mode');
+        const secretField = document.getElementById('gdrive-secret-field');
+        const secretHint = document.getElementById('gdrive-secret-hint');
+        const originCode = document.getElementById('gdrive-js-origin');
+        const redirectCode = document.getElementById('gdrive-redirect-uri');
+        if (!badge) return;
+
+        const origin = (gd.status?.jsOrigin) || (window.location.origin && window.location.origin !== 'null' ? window.location.origin : 'http://localhost:8765');
+        const redirectUri = (gd.status?.redirectUri) || `${origin}/api/gdrive/callback`;
+        if (originCode) originCode.textContent = origin;
+        if (redirectCode) redirectCode.textContent = redirectUri;
+
+        const backendActive = isBackendGdriveActive();
+        if (modeSel) {
+          modeSel.value = backendActive ? 'backend' : 'browser';
+          const backendOpt = modeSel.querySelector('option[value="backend"]');
+          if (backendOpt) backendOpt.disabled = !gd.backendAvailable;
+        }
+        if (secretField) secretField.style.display = backendActive ? 'flex' : 'none';
+        if (secretHint) {
+          secretHint.textContent = (backendActive && gd.status?.hasClientSecret) ? '（已安全保存在 SQLite）' : '';
+        }
+
+        const connected = isGdriveConnected();
+        const configured = isGdriveConfigured();
+        if (connected) {
+          const email = backendActive ? (gd.status?.accountEmail || gd.status?.accountName) : (gd.gisAccount?.email || gd.gisAccount?.name);
+          badge.classList.add('connected');
+          badge.textContent = `● 已连接 Google Drive${email ? ` · ${email}` : ''}`;
+          if (authBtn) authBtn.textContent = '↻ 重新授权';
+          if (discBtn) discBtn.style.display = 'inline-flex';
+        } else {
+          badge.classList.remove('connected');
+          badge.textContent = configured ? '○ 已配置 OAuth · 待授权登录' : '○ 未配置 Google Drive 授权';
+          if (authBtn) authBtn.textContent = '🔐 授权登录 Google Drive';
+          if (discBtn) discBtn.style.display = 'none';
+        }
+
+        if (hint) {
+          if (!gd.backendAvailable) {
+            hint.textContent = '当前使用「浏览器 GIS 授权」模式（仅需 Client ID 立即可用；重启后台服务后可启用持久化刷新令牌）';
+          } else if (backendActive) {
+            hint.textContent = '当前模式：后台 OAuth 2.0 持久化（支持自动刷新令牌）';
+          } else {
+            hint.textContent = '当前模式：浏览器 GIS 临时授权（仅当前标签页有效）';
+          }
+        }
+
+        const canAct = connected && !gd.busy;
+        if (upFullBtn) upFullBtn.disabled = !canAct;
+        if (upWsBtn) upWsBtn.disabled = !canAct;
+        if (authBtn) authBtn.disabled = gd.busy;
+        if (hdrQuickBtn) {
+          hdrQuickBtn.style.display = connected ? 'inline-flex' : 'none';
+          hdrQuickBtn.disabled = gd.busy;
+        }
+
+        const lastAt = backendActive ? gd.status?.lastBackupAt : gd.gisLastBackupAt;
+        const lastFile = backendActive ? gd.status?.lastBackupFile : gd.gisLastBackupFile;
+        if (lastInfo) {
+          lastInfo.textContent = lastAt
+            ? `最近云端上传：${formatTime(lastAt)} · ${lastFile || 'mindbubble-backup.json'}`
+            : '尚未记录云端上传备份';
+        }
+        renderGdriveFiles();
+      }
+
+      function renderGdriveFiles() {
+        const listEl = document.getElementById('gdrive-files-list');
+        if (!listEl) return;
+        const gd = settingsState.gdrive;
+        if (!isGdriveConnected()) {
+          listEl.innerHTML = '<div class="hint-text">请先完成 Google Drive 授权登录（首次需点击右上「⚙ OAuth 授权配置」填入 Client ID），随后即可一键备份与恢复。</div>';
+          return;
+        }
+        const q = (gd.fileSearch || '').trim().toLowerCase();
+        const files = (gd.files || []).filter(f => !q || String(f.name || '').toLowerCase().includes(q));
+        if (!files.length) {
+          listEl.innerHTML = `<div class="hint-text">${q ? '未找到匹配的云端备份文件。' : '云端备份文件夹中暂无备份文件，点击上方「一键上传完整备份包至 Drive」即可创建首份云端备份。'}</div>`;
+          return;
+        }
+
+        listEl.innerHTML = '';
+        for (const f of files) {
+          const row = document.createElement('div');
+          row.className = 'gdrive-file-row';
+          const props = f.appProperties || {};
+          const chips = [];
+          if (props.tasks) chips.push(`<span class="diff-chip add">${escapeHtml(props.tasks)} 气泡</span>`);
+          if (props.galaxies) chips.push(`<span class="diff-chip">${escapeHtml(props.galaxies)} 星系</span>`);
+          if (props.snapshots) chips.push(`<span class="diff-chip mod">${escapeHtml(props.snapshots)} 快照</span>`);
+          if (f.size) chips.push(`<span>${escapeHtml(formatBytes(Number(f.size)))}</span>`);
+          if (f.modifiedTime) chips.push(`<span>更新于 ${escapeHtml(formatTime(new Date(f.modifiedTime).getTime()))}</span>`);
+
+          row.innerHTML = `
+            <div class="gdrive-file-info">
+              <div class="gdrive-file-name">☁ ${escapeHtml(f.name || '未命名备份.json')}</div>
+              <div class="gdrive-file-meta">${chips.join('') || '<span>JSON 备份文件</span>'}</div>
+            </div>
+            <div class="row-flex">
+              <button type="button" class="glass-btn gd-preview-btn">👁 预览并导入</button>
+              <button type="button" class="glass-btn primary gd-import-btn">⚡ 合并恢复</button>
+              ${f.webViewLink ? `<a class="glass-btn" href="${escapeHtml(f.webViewLink)}" target="_blank" rel="noopener">↗ 打开</a>` : ''}
+              <button type="button" class="glass-btn danger gd-del-btn" title="移至 Google Drive 回收站">🗑</button>
+            </div>
+          `;
+          row.querySelector('.gd-preview-btn').addEventListener('click', () => previewGdriveFile(f.id, f.name));
+          row.querySelector('.gd-import-btn').addEventListener('click', () => quickImportGdriveFile(f.id, f.name, 'merge'));
+          row.querySelector('.gd-del-btn').addEventListener('click', () => deleteGdriveFile(f.id, f.name));
+          listEl.appendChild(row);
+        }
+      }
+
+      async function loadGdriveStatus() {
+        loadGisConfigFromStorage();
+        const gd = settingsState.gdrive;
+        try {
+          const st = await apiJson('/api/gdrive/status');
+          gd.backendAvailable = Boolean(st.backendSupported);
+          gd.status = st;
+          if (!gd.modeUserSet) gd.authMode = 'backend';
+
+          const cidInp = document.getElementById('gdrive-client-id');
+          const folderInp = document.getElementById('gdrive-folder-name');
+          const roChk = document.getElementById('gdrive-scope-readonly');
+          if (isBackendGdriveActive()) {
+            if (cidInp && document.activeElement !== cidInp) cidInp.value = st.clientId || '';
+            if (folderInp && document.activeElement !== folderInp) folderInp.value = st.folderName || 'MindBubble Backups';
+            if (roChk) roChk.checked = st.scopeMode === 'drive.file+readonly';
+          }
+        } catch (_) {
+          gd.backendAvailable = false;
+          gd.status = null;
+          gd.authMode = 'browser';
+          const cidInp = document.getElementById('gdrive-client-id');
+          const folderInp = document.getElementById('gdrive-folder-name');
+          const roChk = document.getElementById('gdrive-scope-readonly');
+          if (cidInp && document.activeElement !== cidInp) cidInp.value = gd.gisConfig.clientId || '';
+          if (folderInp && document.activeElement !== folderInp) folderInp.value = gd.gisConfig.folderName || 'MindBubble Backups';
+          if (roChk) roChk.checked = gd.gisConfig.scopeMode === 'drive.file+readonly';
+        }
+        renderGdriveUi();
+        if (isGdriveConnected()) {
+          await loadGdriveFiles().catch(() => {});
+        }
+      }
+
+      async function saveGdriveConfig() {
+        const gd = settingsState.gdrive;
+        const cid = (document.getElementById('gdrive-client-id')?.value || '').trim();
+        const csec = (document.getElementById('gdrive-client-secret')?.value || '').trim();
+        const folderName = (document.getElementById('gdrive-folder-name')?.value || '').trim() || 'MindBubble Backups';
+        const scopeMode = document.getElementById('gdrive-scope-readonly')?.checked ? 'drive.file+readonly' : 'drive.file';
+
+        if (!cid) {
+          showToast('请填写 Google OAuth Client ID');
+          document.getElementById('gdrive-config-panel')?.classList.add('open');
+          return;
+        }
+
+        gd.gisConfig = { clientId: cid, folderName, scopeMode };
+        saveGisConfigToStorage();
+
+        if (isBackendGdriveActive()) {
+          try {
+            const payload = {
+              clientId: cid,
+              folderName,
+              scopeMode
+            };
+            if (csec) payload.clientSecret = csec;
+            if (gd.pendingCredentialsJson && !csec) payload.credentialsJson = gd.pendingCredentialsJson;
+            const res = await apiJson('/api/gdrive/config', {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload)
+            });
+            gd.status = res;
+            gd.pendingCredentialsJson = null;
+            document.getElementById('gdrive-client-secret').value = '';
+            showToast('Google Drive OAuth 配置已保存');
+          } catch (err) {
+            showToast(`保存配置失败：${err.message}`);
+          }
+        } else {
+          showToast('已保存浏览器 GIS 模式 Client ID，现在可点击「授权登录 Google Drive」');
+        }
+        renderGdriveUi();
+      }
+
+      let gisLoadPromise = null;
+      function ensureGisLoaded() {
+        if (window.google?.accounts?.oauth2) return Promise.resolve(window.google.accounts.oauth2);
+        if (gisLoadPromise) return gisLoadPromise;
+        gisLoadPromise = new Promise((resolve, reject) => {
+          const s = document.createElement('script');
+          s.src = 'https://accounts.google.com/gsi/client';
+          s.async = true;
+          s.defer = true;
+          s.onload = () => {
+            if (window.google?.accounts?.oauth2) resolve(window.google.accounts.oauth2);
+            else reject(new Error('Google Identity Services 加载后未就绪'));
+          };
+          s.onerror = () => reject(new Error('无法加载 Google Identity Services 脚本，请检查网络或切换后台 OAuth 模式'));
+          document.head.appendChild(s);
+        });
+        return gisLoadPromise;
+      }
+
+      async function requestGisAccessToken(promptType = 'consent') {
+        const gd = settingsState.gdrive;
+        const cid = gd.gisConfig.clientId.trim();
+        if (!cid) throw new Error('请先填写 Client ID');
+        const oauth2 = await ensureGisLoaded();
+        const scope = gd.gisConfig.scopeMode === 'drive.file+readonly'
+          ? 'https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile'
+          : 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile';
+
+        return new Promise((resolve, reject) => {
+          const client = oauth2.initTokenClient({
+            client_id: cid,
+            scope,
+            callback: async (resp) => {
+              if (!resp || resp.error) {
+                reject(new Error(resp?.error_description || resp?.error || 'Google 授权被取消'));
+                return;
+              }
+              gd.gisAccessToken = resp.access_token;
+              gd.gisTokenExpiresAt = Date.now() + (Number(resp.expires_in) || 3600) * 1000;
+              gd.gisFolderId = '';
+              try {
+                const uRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+                  headers: { Authorization: `Bearer ${gd.gisAccessToken}` }
+                });
+                if (uRes.ok) {
+                  const prof = await uRes.json();
+                  gd.gisAccount = { email: prof.email || '', name: prof.name || '' };
+                }
+              } catch (_) {}
+              resolve(gd.gisAccessToken);
+            }
+          });
+          client.requestAccessToken({ prompt: promptType });
+        });
+      }
+
+      async function gisFetchJson(url, options = {}) {
+        const gd = settingsState.gdrive;
+        if (!gd.gisAccessToken || Date.now() >= gd.gisTokenExpiresAt - 10000) {
+          throw new Error('Google Drive 授权已过期，请重新点击授权登录');
+        }
+        const headers = { ...(options.headers || {}), Authorization: `Bearer ${gd.gisAccessToken}` };
+        const res = await fetch(url, { ...options, headers });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(data?.error?.message || `Google Drive API HTTP ${res.status}`);
+        }
+        return data;
+      }
+
+      async function gisEnsureFolder() {
+        const gd = settingsState.gdrive;
+        const folderName = gd.gisConfig.folderName || 'MindBubble Backups';
+        if (gd.gisFolderId) {
+          try {
+            const meta = await gisFetchJson(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(gd.gisFolderId)}?fields=id,name,trashed`);
+            if (meta.id && !meta.trashed) return meta.id;
+          } catch (_) {
+            gd.gisFolderId = '';
+          }
+        }
+        const escaped = folderName.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+        const q = `name='${escaped}' and mimeType='application/vnd.google-apps.folder' and trashed=false`;
+        const search = await gisFetchJson(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name)&pageSize=5`);
+        if (Array.isArray(search.files) && search.files.length) {
+          gd.gisFolderId = search.files[0].id;
+          return gd.gisFolderId;
+        }
+        const created = await gisFetchJson('https://www.googleapis.com/drive/v3/files?fields=id,name', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: folderName, mimeType: 'application/vnd.google-apps.folder' })
+        });
+        gd.gisFolderId = created.id;
+        return created.id;
+      }
+
+      async function startGdriveAuth() {
+        const gd = settingsState.gdrive;
+        if (!isGdriveConfigured()) {
+          document.getElementById('gdrive-config-panel')?.classList.add('open');
+          showToast(isBackendGdriveActive()
+            ? '请先配置并保存 Client ID 与 Client Secret'
+            : '请先填写并保存 Google OAuth Client ID');
+          return;
+        }
+        gd.busy = true;
+        renderGdriveUi();
+        try {
+          if (isBackendGdriveActive()) {
+            const res = await apiJson('/api/gdrive/auth/start');
+            const popup = window.open(res.authUrl, 'mindbubble_gdrive_oauth', 'width=540,height=680,menubar=no,toolbar=no');
+            if (!popup) {
+              window.location.href = res.authUrl;
+              return;
+            }
+            showToast('已打开 Google 授权窗口，请完成登录后自动返回');
+          } else {
+            await requestGisAccessToken('consent');
+            showToast(`Google Drive 授权成功${gd.gisAccount?.email ? `：${gd.gisAccount.email}` : ''}`);
+            await loadGdriveFiles();
+          }
+        } catch (err) {
+          showToast(`Google Drive 授权失败：${err.message}`);
+        } finally {
+          gd.busy = false;
+          renderGdriveUi();
+        }
+      }
+
+      async function disconnectGdrive() {
+        const gd = settingsState.gdrive;
+        if (isBackendGdriveActive()) {
+          try {
+            gd.status = await apiJson('/api/gdrive/disconnect', { method: 'POST' });
+          } catch (err) {
+            showToast(`断开授权失败：${err.message}`);
+          }
+        } else {
+          if (gd.gisAccessToken && window.google?.accounts?.oauth2?.revoke) {
+            try { window.google.accounts.oauth2.revoke(gd.gisAccessToken); } catch (_) {}
+          }
+          gd.gisAccessToken = '';
+          gd.gisTokenExpiresAt = 0;
+          gd.gisAccount = { email: '', name: '' };
+          gd.gisFolderId = '';
+        }
+        gd.files = [];
+        renderGdriveUi();
+        showToast('已断开 Google Drive 授权');
+      }
+
+      async function uploadBackupToGdrive(includeHistory = true) {
+        const gd = settingsState.gdrive;
+        if (!isGdriveConnected()) {
+          showToast('请先授权登录 Google Drive');
+          return;
+        }
+        gd.busy = true;
+        renderGdriveUi();
+        try {
+          if (isBackendGdriveActive()) {
+            const res = await apiJson('/api/gdrive/backup', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ includeHistory })
+            });
+            showToast(`✓ 已上传到 Google Drive「${res.folderName}」：${res.file?.name || '备份成功'}`);
+            await loadGdriveStatus();
+          } else {
+            const payload = await apiJson(`/api/backup/export?includeHistory=${includeHistory ? '1' : '0'}`);
+            const folderId = await gisEnsureFolder();
+            const d = new Date();
+            const pad = n => String(n).padStart(2, '0');
+            const stamp = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+            const fname = `mindbubble-backup-${includeHistory ? 'full' : 'workspace'}-${stamp}.json`;
+            const curState = payload.currentState || {};
+            const meta = {
+              name: fname,
+              parents: [folderId],
+              mimeType: 'application/json',
+              appProperties: {
+                app: 'mindbubble',
+                mode: includeHistory ? 'full' : 'workspace',
+                tasks: String((curState.tasks || []).length),
+                galaxies: String((curState.galaxies || curState.prefs?.galaxies || []).length),
+                snapshots: String((payload.snapshots || []).length),
+                revision: String(payload.revision || 0)
+              }
+            };
+            const boundary = `mindbubble_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+            const body = [
+              `--${boundary}`,
+              'Content-Type: application/json; charset=UTF-8',
+              '',
+              JSON.stringify(meta),
+              `--${boundary}`,
+              'Content-Type: application/json; charset=UTF-8',
+              '',
+              JSON.stringify(payload),
+              `--${boundary}--`,
+              ''
+            ].join('\r\n');
+            const uploaded = await gisFetchJson('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,size,modifiedTime,webViewLink,appProperties', {
+              method: 'POST',
+              headers: { 'Content-Type': `multipart/related; boundary=${boundary}` },
+              body
+            });
+            gd.gisLastBackupAt = Date.now();
+            gd.gisLastBackupFile = uploaded.name || fname;
+            saveGisConfigToStorage();
+            showToast(`✓ 已上传到 Google Drive：${uploaded.name || fname}`);
+            await loadGdriveFiles();
+          }
+        } catch (err) {
+          showToast(`云端上传失败：${err.message}`);
+        } finally {
+          gd.busy = false;
+          renderGdriveUi();
+        }
+      }
+
+      async function loadGdriveFiles() {
+        const gd = settingsState.gdrive;
+        if (!isGdriveConnected()) return;
+        try {
+          if (isBackendGdriveActive()) {
+            const res = await apiJson(`/api/gdrive/files?all=${gd.searchAll ? '1' : '0'}&limit=40`);
+            gd.files = res.files || [];
+          } else {
+            let q = "trashed=false and mimeType!='application/vnd.google-apps.folder' and (mimeType='application/json' or name contains '.json')";
+            if (!gd.searchAll) {
+              const fid = await gisEnsureFolder();
+              q = `'${fid}' in parents and trashed=false and (mimeType='application/json' or name contains '.json')`;
+            }
+            const res = await gisFetchJson(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&orderBy=modifiedTime%20desc&pageSize=40&fields=files(id,name,size,modifiedTime,webViewLink,appProperties)`);
+            gd.files = res.files || [];
+          }
+          renderGdriveFiles();
+        } catch (err) {
+          showToast(`获取 Google Drive 文件列表失败：${err.message}`);
+        }
+      }
+
+      async function fetchGdriveBackupJson(fileId) {
+        if (isBackendGdriveActive()) {
+          const res = await apiJson(`/api/gdrive/files/${encodeURIComponent(fileId)}/preview`, { method: 'POST' });
+          return res.backup;
+        }
+        const gd = settingsState.gdrive;
+        const res = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?alt=media`, {
+          headers: { Authorization: `Bearer ${gd.gisAccessToken}` }
+        });
+        if (!res.ok) throw new Error(`下载云端备份失败 HTTP ${res.status}`);
+        return await res.json();
+      }
+
+      async function previewGdriveFile(fileId, fileName) {
+        const gd = settingsState.gdrive;
+        gd.busy = true;
+        renderGdriveUi();
+        try {
+          const backup = await fetchGdriveBackupJson(fileId);
+          inspectBackupData(backup, fileName || 'Google Drive 备份.json', '☁ Google Drive');
+          document.getElementById('import-preview-card')?.scrollIntoView?.({ behavior: 'smooth', block: 'nearest' });
+          showToast(`已加载云端备份「${fileName}」预览，请选择导入模式后确认恢复`);
+        } catch (err) {
+          showToast(`预览云端备份失败：${err.message}`);
+        } finally {
+          gd.busy = false;
+          renderGdriveUi();
+        }
+      }
+
+      async function quickImportGdriveFile(fileId, fileName, mode = 'merge') {
+        if (!window.confirm(`确定从 Google Drive 导入「${fileName}」？系统会在恢复前自动创建安全保护点。`)) return;
+        const gd = settingsState.gdrive;
+        gd.busy = true;
+        renderGdriveUi();
+        try {
+          let res;
+          if (isBackendGdriveActive()) {
+            res = await apiJson(`/api/gdrive/files/${encodeURIComponent(fileId)}/import`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ mode })
+            });
+          } else {
+            const backup = await fetchGdriveBackupJson(fileId);
+            res = await apiJson('/api/backup/import', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ backup, mode })
+            });
+          }
+          try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(res.state));
+          } catch (_) {}
+          settingsState.pendingImportData = null;
+          document.getElementById('import-preview-card').style.display = 'none';
+          showToast(`✓ 已从 Google Drive 恢复 ${res.importedTasks} 个气泡与 ${res.importedSnapshots} 个快照`);
+          await refreshAll();
+        } catch (err) {
+          showToast(`从 Google Drive 恢复失败：${err.message}`);
+        } finally {
+          gd.busy = false;
+          renderGdriveUi();
+        }
+      }
+
+      async function deleteGdriveFile(fileId, fileName) {
+        if (!window.confirm(`确定将云端备份「${fileName}」移至 Google Drive 回收站吗？`)) return;
+        try {
+          if (isBackendGdriveActive()) {
+            await apiJson(`/api/gdrive/files/${encodeURIComponent(fileId)}`, { method: 'DELETE' });
+          } else {
+            await gisFetchJson(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}?fields=id,trashed`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ trashed: true })
+            });
+          }
+          showToast(`已将「${fileName}」移至 Google Drive 回收站`);
+          await loadGdriveFiles();
+        } catch (err) {
+          showToast(`删除云端文件失败：${err.message}`);
+        }
+      }
+
+      function inspectBackupData(parsed, sourceName, sourceBadge = '') {
+        let formatLabel = '';
+        let wsState = null;
+        let snapCount = 0;
+
+        if (parsed?.format === 'mindbubble-backup' && parsed.currentState && Array.isArray(parsed.currentState.tasks)) {
+          formatLabel = parsed.mode === 'snapshot' ? 'v2 单快照备份' : 'v2 完整时光机备份';
+          wsState = parsed.currentState;
+          snapCount = Array.isArray(parsed.snapshots) ? parsed.snapshots.length : 0;
+        } else if (Array.isArray(parsed?.tasks)) {
+          formatLabel = 'v1 工作区 JSON';
+          wsState = parsed;
+          snapCount = 0;
+        } else {
+          throw new Error('未识别的备份文件结构');
+        }
+
+        settingsState.pendingImportData = parsed;
+        document.getElementById('import-file-name').textContent = `已选择：${sourceName}`;
+        document.getElementById('import-summary-title').textContent = sourceName;
+        document.getElementById('import-format-badge').textContent = sourceBadge ? `${sourceBadge} · ${formatLabel}` : formatLabel;
+
+        const tasks = wsState.tasks || [];
+        const links = wsState.manualLinks || [];
+        const clusters = wsState.clusters || [];
+        const galaxies = wsState.galaxies || wsState.prefs?.galaxies || [];
+        document.getElementById('import-meta-chips').innerHTML = `
+          <span class="diff-chip add">${tasks.length} 个任务气泡</span>
+          <span class="diff-chip">${galaxies.length || 1} 个星系</span>
+          <span class="diff-chip">${links.length} 条手动连线</span>
+          <span class="diff-chip">${clusters.length} 个 AI 星群</span>
+          <span class="diff-chip mod">${snapCount} 个历史快照</span>
+          ${parsed.exportedAt ? `<span class="diff-chip">导出时间：${formatTime(parsed.exportedAt)}</span>` : ''}
+        `;
+        document.getElementById('import-preview-card').style.display = 'flex';
       }
 
       async function inspectBackupFile(file) {
         try {
           const text = await file.text();
           const parsed = JSON.parse(text);
-          let formatLabel = '';
-          let wsState = null;
-          let snapCount = 0;
-
-          if (parsed?.format === 'mindbubble-backup' && parsed.currentState && Array.isArray(parsed.currentState.tasks)) {
-            formatLabel = parsed.mode === 'snapshot' ? 'v2 单快照备份' : 'v2 完整时光机备份';
-            wsState = parsed.currentState;
-            snapCount = Array.isArray(parsed.snapshots) ? parsed.snapshots.length : 0;
-          } else if (Array.isArray(parsed?.tasks)) {
-            formatLabel = 'v1 工作区 JSON';
-            wsState = parsed;
-            snapCount = 0;
-          } else {
-            throw new Error('未识别的备份文件结构');
-          }
-
-          settingsState.pendingImportData = parsed;
-          document.getElementById('import-file-name').textContent = `已选择：${file.name}`;
-          document.getElementById('import-summary-title').textContent = file.name;
-          document.getElementById('import-format-badge').textContent = formatLabel;
-
-          const tasks = wsState.tasks || [];
-          const links = wsState.manualLinks || [];
-          const clusters = wsState.clusters || [];
-          document.getElementById('import-meta-chips').innerHTML = `
-            <span class="diff-chip add">${tasks.length} 个任务气泡</span>
-            <span class="diff-chip">${links.length} 条手动连线</span>
-            <span class="diff-chip">${clusters.length} 个 AI 星群</span>
-            <span class="diff-chip mod">${snapCount} 个历史快照</span>
-            ${parsed.exportedAt ? `<span class="diff-chip">导出时间：${formatTime(parsed.exportedAt)}</span>` : ''}
-          `;
-          document.getElementById('import-preview-card').style.display = 'flex';
+          inspectBackupData(parsed, file.name);
         } catch (err) {
           showToast(`无法解析备份文件：${err.message}`);
         }
@@ -1505,11 +2686,120 @@
         return Math.max(lo, Math.min(hi, v));
       }
 
+      // ---------- MCP & Antigravity Integration ----------
+      const FALLBACK_MCP_TOOLS = [
+        { name: 'get_workspace_overview', description: '获取全局统计、各星系气泡数、Top-3 核心要务与标签目录', annotations: { readOnlyHint: true } },
+        { name: 'list_galaxies', description: '列出全部星系（默认星系及自定义星系）与统计', annotations: { readOnlyHint: true } },
+        { name: 'create_galaxy', description: '创建新星系以隔离不同项目或生活场景', annotations: { readOnlyHint: false } },
+        { name: 'update_galaxy', description: '更新星系名称、图标、颜色或描述', annotations: { readOnlyHint: false } },
+        { name: 'list_tasks', description: '按星系、完成状态、标签、优先级、Top-3 或关键词筛选气泡', annotations: { readOnlyHint: true } },
+        { name: 'get_task', description: '查询单个气泡详情及关联手动连线', annotations: { readOnlyHint: true } },
+        { name: 'create_task', description: '新建思维气泡（支持星系、标签、截止时间、Top-3 及自动连线）', annotations: { readOnlyHint: false } },
+        { name: 'update_task', description: '更新气泡标题、备注、标签、优先级、截止时间或星系', annotations: { readOnlyHint: false } },
+        { name: 'complete_task', description: '完成气泡（记录 completedAt）或恢复进行中', annotations: { readOnlyHint: false } },
+        { name: 'delete_task', description: '删除气泡及其连线（Time Machine 自动留痕）', annotations: { readOnlyHint: false } },
+        { name: 'move_tasks_to_galaxy', description: '批量迁移气泡（与可选聚类）至目标星系并保持手动连线', annotations: { readOnlyHint: false } },
+        { name: 'link_tasks', description: '在两个气泡之间创建手动连线', annotations: { readOnlyHint: false } },
+        { name: 'unlink_tasks', description: '移除气泡间的手动连线', annotations: { readOnlyHint: false } },
+        { name: 'get_critical_path', description: '计算核心推进关键路径（支持本地拓扑或 AGY 智能生成）', annotations: { readOnlyHint: true } },
+        { name: 'get_daily_report', description: '生成指定日期复盘报告（当日完成、Top-3、逾期与到期项）', annotations: { readOnlyHint: true } },
+        { name: 'list_snapshots', description: '查看 Time Machine 历史快照列表', annotations: { readOnlyHint: true } },
+        { name: 'create_snapshot', description: '立即创建一条手动备份快照', annotations: { readOnlyHint: false } },
+        { name: 'restore_snapshot', description: '恢复历史快照（自动生成保护点，需 confirm=true）', annotations: { readOnlyHint: false } }
+      ];
+
+      function renderMcpInfo(data) {
+        const badge = document.getElementById('mcp-agy-badge');
+        const httpHint = document.getElementById('mcp-http-hint');
+        const cfgPathEl = document.getElementById('mcp-config-path');
+        const stdioPre = document.getElementById('mcp-stdio-snippet');
+        const httpPre = document.getElementById('mcp-http-snippet');
+        const capSummary = document.getElementById('mcp-cap-summary');
+        const grid = document.getElementById('mcp-tools-grid');
+        if (!badge || !grid) return;
+
+        const agy = data.antigravity || {};
+        if (data._fallback) {
+          badge.className = 'gdrive-account-badge connected';
+          badge.textContent = '● Antigravity Stdio MCP 已就绪（重启服务端后启用 /mcp HTTP）';
+          if (httpHint) httpHint.textContent = '当前服务端进程尚未重载新路由，Stdio MCP 可直接读写工作区';
+        } else if (agy.registered) {
+          badge.className = 'gdrive-account-badge connected';
+          badge.textContent = `● 已默认内置到 Antigravity${agy.otherServers?.length ? `（共存 ${agy.otherServers.length} 个 MCP）` : ''}`;
+          if (httpHint) httpHint.textContent = `Streamable HTTP 端点：${data.streamableHttpUrl}`;
+        } else {
+          badge.className = 'gdrive-account-badge';
+          badge.textContent = '○ 尚未写入 Antigravity mcp_config.json';
+          if (httpHint) httpHint.textContent = `Streamable HTTP 端点：${data.streamableHttpUrl || `${window.location.origin}/mcp`}`;
+        }
+        if (cfgPathEl) cfgPathEl.textContent = `配置文件：${agy.configPath || '~/.gemini/config/mcp_config.json'}`;
+
+        const origin = window.location.origin || 'http://127.0.0.1:8765';
+        const stdioObj = data.stdioConfig || {
+          mcpServers: {
+            mindbubble: {
+              command: '/opt/anaconda3/bin/python3',
+              args: ['/Users/jimmy/Dev/personal_study/mindbubble_mcp.py'],
+              env: {
+                MINDBUBBLE_API_URL: origin,
+                MINDBUBBLE_DB_PATH: '/Users/jimmy/Dev/personal_study/data/mindbubble.sqlite'
+              }
+            }
+          }
+        };
+        const httpObj = data.httpConfig || { mcpServers: { mindbubble: { url: `${origin}/mcp` } } };
+        if (stdioPre) stdioPre.textContent = JSON.stringify(stdioObj, null, 2);
+        if (httpPre) httpPre.textContent = JSON.stringify(httpObj, null, 2);
+
+        const tools = Array.isArray(data.tools) && data.tools.length ? data.tools : FALLBACK_MCP_TOOLS;
+        const resCount = Array.isArray(data.resources) ? data.resources.length : 3;
+        const promptCount = Array.isArray(data.prompts) ? data.prompts.length : 2;
+        if (capSummary) {
+          capSummary.textContent = `共暴露 ${tools.length} 个 Tools、${resCount} 个 Resources（mindbubble://overview, mindbubble://galaxies, mindbubble://tasks/active）与 ${promptCount} 个 Prompts（daily_planning, organize_galaxy）`;
+        }
+        grid.innerHTML = tools.map(t => {
+          const ro = Boolean(t.annotations?.readOnlyHint);
+          return `
+            <div class="mcp-tool-card">
+              <div class="row-flex" style="justify-content:space-between;gap:6px;">
+                <span class="mcp-tool-name">${escapeHtml(t.name)}</span>
+                <span class="mcp-tool-badge${ro ? '' : ' write'}">${ro ? '只读' : '读写'}</span>
+              </div>
+              <div class="hint-text">${escapeHtml(t.description || '')}</div>
+            </div>
+          `;
+        }).join('');
+      }
+
+      async function loadMcpInfo() {
+        try {
+          const data = await apiJson('/api/mcp/info');
+          renderMcpInfo(data);
+        } catch (_) {
+          renderMcpInfo({ _fallback: true, tools: FALLBACK_MCP_TOOLS });
+        }
+      }
+
+      async function syncMcpToAntigravity() {
+        const btn = document.getElementById('mcp-install-agy-btn');
+        if (btn) btn.disabled = true;
+        try {
+          const res = await apiJson('/api/mcp/install-antigravity', { method: 'POST' });
+          showToast('已将 MindBubble MCP 写入 Antigravity 默认配置');
+          await loadMcpInfo();
+          return res;
+        } catch (err) {
+          showToast(`当前服务未包含热写入接口，请使用下方配置或重启服务：${err.message}`);
+        } finally {
+          if (btn) btn.disabled = false;
+        }
+      }
+
       // ---------- Boot ----------
       bindEvents();
       const hashTab = (window.location.hash || '').replace('#', '');
-      if (['timemachine', 'backup', 'storage', 'prefs'].includes(hashTab)) {
-        document.querySelector(`.nav-btn[data-tab="${hashTab}"]`)?.click();
+      if (['timemachine', 'backup', 'storage', 'prefs', 'ai', 'ai-settings', 'mcp'].includes(hashTab)) {
+        activateTab(hashTab, { scrollToAi: hashTab === 'ai' || hashTab === 'ai-settings' });
       }
       refreshAll().catch(err => {
         document.getElementById('header-status-pill').textContent = `连接失败：${err.message}`;
