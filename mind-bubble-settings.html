@@ -825,6 +825,156 @@
       color: #ddd6fe;
     }
 
+    /* Contacts Management */
+    .contacts-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .contacts-filters {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      flex: 1;
+      min-width: 240px;
+    }
+
+    .contacts-subcard {
+      display: none;
+      flex-direction: column;
+      gap: 12px;
+      padding: 14px;
+      border-radius: 14px;
+      background: rgba(9, 15, 30, 0.72);
+      border: 1px solid rgba(56, 189, 248, 0.28);
+    }
+
+    .contacts-subcard.open {
+      display: flex;
+    }
+
+    .contacts-table-wrap {
+      overflow-x: auto;
+      border-radius: 12px;
+      border: 1px solid rgba(148, 163, 184, 0.16);
+      background: rgba(9, 15, 30, 0.56);
+    }
+
+    .contacts-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    .contacts-table th {
+      text-align: left;
+      padding: 10px 12px;
+      font-size: 11.5px;
+      font-weight: 600;
+      color: var(--text-muted);
+      border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+      background: rgba(15, 23, 42, 0.65);
+      white-space: nowrap;
+    }
+
+    .contacts-table td {
+      padding: 10px 12px;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+      vertical-align: middle;
+    }
+
+    .contacts-table tbody tr:hover {
+      background: rgba(30, 41, 59, 0.45);
+    }
+
+    .contact-person-cell {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 150px;
+    }
+
+    .contact-avatar {
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12.5px;
+      font-weight: 700;
+      color: #f8fafc;
+      flex-shrink: 0;
+      box-shadow: inset 0 -2px 5px rgba(2, 6, 23, 0.35);
+    }
+
+    .contact-dept-pill {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 9px;
+      border-radius: 999px;
+      font-size: 11.5px;
+      background: rgba(56, 189, 248, 0.12);
+      border: 1px solid rgba(56, 189, 248, 0.28);
+      color: #bae6fd;
+      max-width: 220px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .contact-email-btn {
+      background: transparent;
+      border: none;
+      color: #cbd5e1;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 12px;
+      cursor: pointer;
+      padding: 2px 5px;
+      border-radius: 6px;
+      text-align: left;
+    }
+
+    .contact-email-btn:hover {
+      background: rgba(56, 189, 248, 0.15);
+      color: #7dd3fc;
+    }
+
+    .contact-source-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      border: 1px solid rgba(148, 163, 184, 0.28);
+      color: var(--text-secondary);
+      background: rgba(15, 23, 42, 0.6);
+      white-space: nowrap;
+    }
+
+    .contact-source-badge.lark {
+      border-color: rgba(52, 211, 153, 0.38);
+      background: rgba(16, 185, 129, 0.14);
+      color: #6ee7b7;
+    }
+
+    .contact-source-badge.import {
+      border-color: rgba(167, 139, 250, 0.38);
+      background: rgba(139, 92, 246, 0.14);
+      color: #ddd6fe;
+    }
+
+    .contacts-empty {
+      padding: 28px 16px;
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 13px;
+    }
+
     @media (max-width: 960px) {
       .workspace-grid { grid-template-columns: 1fr; }
       .side-nav { position: static; flex-direction: row; flex-wrap: wrap; }
@@ -858,6 +1008,7 @@
         <button class="nav-btn" type="button" data-tab="backup">📦 备份导出与导入</button>
         <button class="nav-btn" type="button" data-tab="storage">💾 后台存储与策略</button>
         <button class="nav-btn" type="button" data-tab="prefs">⚙ AI 设置与画布偏好</button>
+        <button class="nav-btn" type="button" data-tab="contacts">👥 联系人管理</button>
         <button class="nav-btn" type="button" data-tab="mcp">🔌 MCP 与 Antigravity</button>
       </nav>
 
@@ -1141,12 +1292,15 @@
                 </select>
               </div>
               <div class="field" id="pref-agy-box">
-                <div style="display:flex;align-items:center;justify-content:space-between;">
-                  <label class="field-label" for="pref-agy-model">AGY 默认模型</label>
-                  <span class="hint-text" id="pref-agy-status">检测中...</span>
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+                  <label class="field-label" for="pref-agy-model">AGY 默认模型 (Antigravity CLI)</label>
+                  <div style="display:flex;align-items:center;gap:6px;">
+                    <span class="hint-text" id="pref-agy-status">检测中...</span>
+                    <button class="pill-btn" id="pref-agy-refresh-btn" type="button" title="重新从 agy models 拉取列表" style="padding:2px 7px;font-size:11px;">↻ 刷新</button>
+                  </div>
                 </div>
                 <select class="glass-select" id="pref-agy-model">
-                  <option value="gemini-4-hydrogen-medium">Gemini 4 Hydrogen (Medium)</option>
+                  <option value="gemini-pro-orchestrator-neon">Orchestrator (Neon · Gemini 4 Neon Medium)</option>
                 </select>
               </div>
             </div>
@@ -1274,6 +1428,139 @@
             <div class="mcp-tools-grid" id="mcp-tools-grid"></div>
           </div>
         </section>
+
+        <!-- Tab 6: Contacts Management -->
+        <section class="tab-pane" id="tab-contacts">
+          <div class="glass-card">
+            <div class="card-title-row">
+              <div>
+                <div class="card-title">👥 联系人管理（支持笔记 @ 自动补全模糊匹配）</div>
+                <p class="hint-text">统一管理团队成员的姓名、部门、邮箱与拼音/别名；在气泡笔记本中输入 <code>@</code> 即可按姓名、拼音首字母、邮箱或部门实时模糊匹配。</p>
+              </div>
+              <div class="row-flex">
+                <span class="gdrive-account-badge" id="contacts-lark-badge">○ 检测飞书连接状态...</span>
+              </div>
+            </div>
+
+            <div class="metrics-grid" id="contacts-metrics">
+              <div class="metric-box">
+                <span class="metric-label">联系人总数</span>
+                <span class="metric-val" id="contacts-metric-total">0</span>
+                <span class="metric-sub">支持笔记 @ 实时检索</span>
+              </div>
+              <div class="metric-box">
+                <span class="metric-label">部门数量</span>
+                <span class="metric-val" id="contacts-metric-depts">0</span>
+                <span class="metric-sub">按部门快速筛选</span>
+              </div>
+              <div class="metric-box">
+                <span class="metric-label">飞书同步</span>
+                <span class="metric-val" id="contacts-metric-lark">0</span>
+                <span class="metric-sub">来自 lark-cli 同步</span>
+              </div>
+              <div class="metric-box">
+                <span class="metric-label">手动 / 导入</span>
+                <span class="metric-val" id="contacts-metric-manual">0</span>
+                <span class="metric-sub">CSV / JSON 或手工维护</span>
+              </div>
+            </div>
+
+            <div class="contacts-toolbar">
+              <div class="contacts-filters">
+                <input class="glass-input" id="contacts-search-input" type="text" placeholder="搜索姓名、拼音首字母(如 ljm)、部门或邮箱..." style="flex:1;min-width:210px;" />
+                <select class="glass-select" id="contacts-dept-filter" style="min-width:160px;">
+                  <option value="">全部部门</option>
+                </select>
+              </div>
+              <div class="row-flex">
+                <button class="glass-btn primary" id="contact-add-toggle-btn" type="button">+ 新增联系人</button>
+                <button class="glass-btn ai-accent" id="contacts-lark-sync-btn" type="button">🔄 从飞书同步</button>
+                <button class="glass-btn" id="contacts-import-toggle-btn" type="button">📥 批量导入 (CSV/JSON)</button>
+                <a class="glass-btn" href="/api/contacts/export?format=csv" download>📤 导出 CSV</a>
+                <a class="glass-btn" href="/api/contacts/export?format=json" download>📤 导出 JSON</a>
+              </div>
+            </div>
+
+            <!-- Add / Edit Form -->
+            <div class="contacts-subcard" id="contact-form-card">
+              <div class="card-title-row">
+                <strong id="contact-form-title" style="font-size:13.5px;color:#bae6fd;">新增联系人</strong>
+                <button class="glass-btn" id="contact-form-cancel-btn" type="button">✕ 取消</button>
+              </div>
+              <div class="form-grid">
+                <div class="field">
+                  <label class="field-label" for="contact-field-name">姓名 *</label>
+                  <input class="glass-input" id="contact-field-name" type="text" placeholder="例如：李剑明" />
+                </div>
+                <div class="field">
+                  <label class="field-label" for="contact-field-dept">部门</label>
+                  <input class="glass-input" id="contact-field-dept" type="text" placeholder="例如：算法研发部" />
+                </div>
+                <div class="field">
+                  <label class="field-label" for="contact-field-email">邮箱</label>
+                  <input class="glass-input" id="contact-field-email" type="email" placeholder="例如：jianming.li@lumio.ai" />
+                </div>
+                <div class="field">
+                  <label class="field-label" for="contact-field-aliases">别名 / 拼音补充</label>
+                  <input class="glass-input" id="contact-field-aliases" type="text" placeholder="例如：Jimmy, 剑明（系统会自动生成首字母）" />
+                </div>
+              </div>
+              <div class="field">
+                <label class="field-label" for="contact-field-notes">备注</label>
+                <input class="glass-input" id="contact-field-notes" type="text" placeholder="岗位职责或补充信息（可选）" />
+              </div>
+              <div class="row-flex" style="justify-content:flex-end;">
+                <button class="glass-btn primary" id="contact-form-save-btn" type="button">💾 保存联系人</button>
+              </div>
+            </div>
+
+            <!-- Batch Import Card -->
+            <div class="contacts-subcard" id="contact-import-card">
+              <div class="card-title-row">
+                <div>
+                  <strong style="font-size:13.5px;color:#ddd6fe;">📥 批量导入联系人（支持 CSV / JSON 文件或粘贴文本）</strong>
+                  <p class="hint-text">CSV 支持表头：<code>姓名,部门,邮箱,别名,备注</code> 或英文 <code>name,department,email,aliases,notes</code>。</p>
+                </div>
+                <button class="glass-btn" id="contact-import-cancel-btn" type="button">✕ 关闭</button>
+              </div>
+              <div class="row-flex" style="justify-content:space-between;">
+                <div class="row-flex">
+                  <input type="file" id="contact-import-file" accept=".csv,.json,.txt" hidden />
+                  <button class="glass-btn" id="contact-import-pick-btn" type="button">📂 选择 CSV / JSON 文件</button>
+                  <span class="hint-text" id="contact-import-file-label">或直接在下方粘贴文本内容</span>
+                </div>
+                <select class="glass-select" id="contact-import-mode" style="min-width:190px;">
+                  <option value="merge">智能合并（按邮箱/姓名去重）</option>
+                  <option value="replace">清空后全量覆盖</option>
+                </select>
+              </div>
+              <textarea class="glass-input" id="contact-import-text" rows="5" placeholder="粘贴 CSV（如：姓名,部门,邮箱&#10;张三,研发部,zhangsan@example.com）或 JSON 数组..." style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;resize:vertical;"></textarea>
+              <div class="row-flex" style="justify-content:flex-end;">
+                <button class="glass-btn primary" id="contact-import-submit-btn" type="button">⚡ 开始导入</button>
+              </div>
+            </div>
+
+            <!-- Contacts Table -->
+            <div class="contacts-table-wrap">
+              <table class="contacts-table">
+                <thead>
+                  <tr>
+                    <th>姓名 / 拼音</th>
+                    <th>部门</th>
+                    <th>邮箱（点击复制）</th>
+                    <th>别名</th>
+                    <th>来源</th>
+                    <th style="text-align:right;">操作</th>
+                  </tr>
+                </thead>
+                <tbody id="contacts-table-body"></tbody>
+              </table>
+              <div class="contacts-empty" id="contacts-empty-state" style="display:none;">
+                暂无联系人。点击上方「+ 新增联系人」、「批量导入」或「从飞书同步」添加团队成员。
+              </div>
+            </div>
+          </div>
+        </section>
       </main>
     </div>
   </div>
@@ -1297,6 +1584,12 @@
         storageInfo: null,
         liveState: null,
         pendingImportData: null,
+        contacts: [],
+        contactDepartments: [],
+        contactSearch: '',
+        contactDept: '',
+        contactEditingId: null,
+        larkStatus: null,
         gdrive: {
           backendAvailable: false,
           authMode: 'backend',
@@ -1363,7 +1656,9 @@
           loadSnapshots(),
           loadLiveState(),
           loadGdriveStatus(),
-          loadMcpInfo().catch(() => {})
+          loadMcpInfo().catch(() => {}),
+          loadContacts().catch(() => {}),
+          loadLarkStatus().catch(() => {})
         ]);
       }
 
@@ -1415,23 +1710,60 @@
         if (llmBox) llmBox.style.display = mode === 'llm' ? 'flex' : 'none';
       }
 
-      async function loadAgyModels(selectedModel) {
+      const DEFAULT_AGY_MODEL = 'gemini-pro-orchestrator-neon';
+      const DEFAULT_AGY_MODEL_LABEL = 'Orchestrator (Neon · Gemini 4 Neon Medium)';
+
+      function sortAndLabelAgyModels(models) {
+        const list = Array.isArray(models) && models.length
+          ? models.map(m => {
+              const id = String(m.id || '').trim();
+              let name = String(m.name || id).trim();
+              if (id === DEFAULT_AGY_MODEL) name = DEFAULT_AGY_MODEL_LABEL;
+              return { id, name };
+            }).filter(m => m.id)
+          : [
+              { id: DEFAULT_AGY_MODEL, name: DEFAULT_AGY_MODEL_LABEL },
+              { id: 'gemini-4-neon-medium', name: 'Gemini 4 Neon (Medium)' }
+            ];
+        if (!list.some(m => m.id === DEFAULT_AGY_MODEL)) {
+          list.unshift({ id: DEFAULT_AGY_MODEL, name: DEFAULT_AGY_MODEL_LABEL });
+        }
+        const rank = (id) => {
+          const low = id.toLowerCase();
+          if (low === 'gemini-pro-orchestrator-neon') return 0;
+          if (low === 'gemini-4-neon-medium') return 1;
+          if (low.includes('orchestrator')) return 2;
+          if (low.includes('neon')) return 3;
+          if (low === 'gemini-4-hydrogen-medium' || low.includes('hydrogen')) return 4;
+          if (low.includes('flash')) return 5;
+          return 6;
+        };
+        return list.map((m, i) => ({ m, i })).sort((a, b) => rank(a.m.id) - rank(b.m.id) || a.i - b.i).map(x => x.m);
+      }
+
+      async function loadAgyModels(selectedModel, { forceRefresh = false } = {}) {
         const sel = document.getElementById('pref-agy-model');
         const st = document.getElementById('pref-agy-status');
         try {
-          const data = await apiJson('/api/ai/models');
-          if (Array.isArray(data.models) && data.models.length) {
-            sel.innerHTML = data.models
+          const data = await apiJson(`/api/ai/models${forceRefresh ? '?refresh=1' : ''}`);
+          const ordered = sortAndLabelAgyModels(data.models);
+          if (sel) {
+            sel.innerHTML = ordered
               .map(m => `<option value="${escapeHtml(m.id)}">${escapeHtml(m.name || m.id)}</option>`)
               .join('');
+            const target = selectedModel || DEFAULT_AGY_MODEL;
+            if ([...sel.options].some(o => o.value === target)) sel.value = target;
+            else if (sel.options.length) sel.value = DEFAULT_AGY_MODEL;
           }
-          const target = selectedModel || data.defaultModel || 'gemini-4-hydrogen-medium';
-          if ([...sel.options].some(o => o.value === target)) sel.value = target;
-          st.textContent = data.available ? '● AGY 已就绪' : '○ 未检测到 agy CLI';
-          st.style.color = data.available ? '#6ee7b7' : '#fda4af';
+          if (st) {
+            st.textContent = data.available ? '● AGY 已就绪' : '○ 未检测到 agy CLI';
+            st.style.color = data.available ? '#6ee7b7' : '#fda4af';
+          }
         } catch (err) {
-          st.textContent = '○ 获取模型失败';
-          st.style.color = '#fda4af';
+          if (st) {
+            st.textContent = '○ 获取模型失败';
+            st.style.color = '#fda4af';
+          }
         }
       }
 
@@ -1440,9 +1772,12 @@
         settingsState.liveState = data.state || { tasks: [], manualLinks: [], clusters: [], aiLinks: [], tagCatalog: [], prefs: {} };
         const prefs = settingsState.liveState.prefs || {};
         const aiMode = (!prefs.aiMode || (prefs.aiMode === 'builtin' && !prefs.aiModeUserSet)) ? 'agy' : prefs.aiMode;
+        const resolvedAgyModel = (!prefs.agyModel || (prefs.agyModel === 'gemini-4-hydrogen-medium' && !prefs.agyModelUserSet))
+          ? DEFAULT_AGY_MODEL
+          : prefs.agyModel;
         document.getElementById('pref-ai-mode').value = aiMode;
         syncPrefModeUi(aiMode);
-        await loadAgyModels(prefs.agyModel);
+        await loadAgyModels(resolvedAgyModel);
         document.getElementById('pref-llm-provider').value = prefs.llmProvider || 'gemini';
         document.getElementById('pref-llm-endpoint').value = prefs.llmEndpoint ||
           'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
@@ -1680,7 +2015,7 @@
 
       function activateTab(tabName, { scrollToAi = false } = {}) {
         const normalized = (tabName === 'ai' || tabName === 'ai-settings') ? 'prefs' : tabName;
-        if (!['timemachine', 'backup', 'storage', 'prefs', 'mcp'].includes(normalized)) return;
+        if (!['timemachine', 'backup', 'storage', 'prefs', 'contacts', 'mcp'].includes(normalized)) return;
         document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === normalized));
         document.querySelectorAll('.tab-pane').forEach(p => p.classList.toggle('active', p.id === `tab-${normalized}`));
         const headerAiBtn = document.getElementById('header-ai-settings-btn');
@@ -1876,6 +2211,9 @@
         document.getElementById('pref-ai-mode').addEventListener('change', e => {
           syncPrefModeUi(e.target.value);
         });
+        document.getElementById('pref-agy-refresh-btn')?.addEventListener('click', () => {
+          loadAgyModels(document.getElementById('pref-agy-model')?.value, { forceRefresh: true });
+        });
 
         document.getElementById('pref-llm-provider').addEventListener('change', e => {
           if (e.target.value === 'gemini') {
@@ -1919,7 +2257,8 @@
               ...(live.prefs || {}),
               aiMode: document.getElementById('pref-ai-mode').value,
               aiModeUserSet: true,
-              agyModel: document.getElementById('pref-agy-model').value || 'gemini-4-hydrogen-medium',
+              agyModel: document.getElementById('pref-agy-model').value || DEFAULT_AGY_MODEL,
+              agyModelUserSet: true,
               llmProvider: document.getElementById('pref-llm-provider').value,
               llmEndpoint: document.getElementById('pref-llm-endpoint').value.trim(),
               llmModel: document.getElementById('pref-llm-model').value.trim(),
@@ -2795,10 +3134,320 @@
         }
       }
 
+      // ---------- Contacts Management ----------
+      function contactAvatarColor(name) {
+        const palette = ['#0ea5e9', '#8b5cf6', '#10b981', '#f59e0b', '#ec4899', '#6366f1', '#14b8a6'];
+        let h = 0;
+        const s = String(name || 'A');
+        for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+        return palette[h % palette.length];
+      }
+
+      async function loadLarkStatus() {
+        const badge = document.getElementById('contacts-lark-badge');
+        try {
+          const data = await apiJson('/api/contacts/lark/status');
+          settingsState.larkStatus = data;
+          if (!badge) return;
+          if (data.userReady) {
+            badge.className = 'gdrive-account-badge connected';
+            badge.textContent = `● 飞书已就绪${data.userName ? ` (${data.userName})` : ''}`;
+          } else if (data.cliInstalled) {
+            badge.className = 'gdrive-account-badge';
+            badge.textContent = `○ 飞书用户授权已过期（需 lark-cli auth login）`;
+          } else {
+            badge.className = 'gdrive-account-badge';
+            badge.textContent = '○ 未检测到 lark-cli';
+          }
+        } catch (_) {
+          if (badge) {
+            badge.className = 'gdrive-account-badge';
+            badge.textContent = '○ 飞书状态待检测（重启服务后可用）';
+          }
+        }
+      }
+
+      async function loadContacts() {
+        const data = await apiJson('/api/contacts');
+        settingsState.contacts = Array.isArray(data.contacts) ? data.contacts : [];
+        settingsState.contactDepartments = Array.isArray(data.departments) ? data.departments : [];
+        renderContacts();
+      }
+
+      function renderContacts() {
+        const all = settingsState.contacts || [];
+        const depts = settingsState.contactDepartments || [];
+        const larkCnt = all.filter(c => c.source === 'lark').length;
+        const manualCnt = all.length - larkCnt;
+
+        const elTotal = document.getElementById('contacts-metric-total');
+        const elDepts = document.getElementById('contacts-metric-depts');
+        const elLark = document.getElementById('contacts-metric-lark');
+        const elManual = document.getElementById('contacts-metric-manual');
+        if (elTotal) elTotal.textContent = String(all.length);
+        if (elDepts) elDepts.textContent = String(depts.length);
+        if (elLark) elLark.textContent = String(larkCnt);
+        if (elManual) elManual.textContent = String(manualCnt);
+
+        const deptSel = document.getElementById('contacts-dept-filter');
+        if (deptSel) {
+          const prev = settingsState.contactDept || '';
+          deptSel.innerHTML = '<option value="">全部部门</option>' +
+            depts.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
+          deptSel.value = depts.includes(prev) ? prev : '';
+          settingsState.contactDept = deptSel.value;
+        }
+
+        const q = (settingsState.contactSearch || '').trim().toLowerCase();
+        const deptFilter = settingsState.contactDept || '';
+        const filtered = all.filter(c => {
+          if (deptFilter && c.department !== deptFilter) return false;
+          if (!q) return true;
+          const hay = [c.name, c.department, c.email, c.pinyin, c.initials, c.aliases, c.notes].join(' ').toLowerCase();
+          return hay.includes(q);
+        });
+
+        const tbody = document.getElementById('contacts-table-body');
+        const emptyEl = document.getElementById('contacts-empty-state');
+        if (!tbody || !emptyEl) return;
+
+        if (!filtered.length) {
+          tbody.innerHTML = '';
+          emptyEl.style.display = 'block';
+          return;
+        }
+        emptyEl.style.display = 'none';
+
+        tbody.innerHTML = filtered.map(c => {
+          const initials = escapeHtml((c.name || '?').slice(0, 1).toUpperCase());
+          const bg = contactAvatarColor(c.name);
+          const srcLabel = c.source === 'lark' ? '飞书' : (c.source === 'import' ? '导入' : '手动');
+          const srcCls = c.source === 'lark' ? 'lark' : (c.source === 'import' ? 'import' : '');
+          const pyHint = [c.initials, c.aliases].filter(Boolean).join(' · ');
+          return `
+            <tr data-contact-id="${escapeHtml(c.id)}">
+              <td>
+                <div class="contact-person-cell">
+                  <span class="contact-avatar" style="background:${bg};">${initials}</span>
+                  <div>
+                    <div style="font-weight:600;color:#f8fafc;">${escapeHtml(c.name)}</div>
+                    ${c.initials ? `<div class="hint-text" style="font-size:11px;">@${escapeHtml(c.initials)}</div>` : ''}
+                  </div>
+                </div>
+              </td>
+              <td>${c.department ? `<span class="contact-dept-pill" title="${escapeHtml(c.department)}">${escapeHtml(c.department)}</span>` : '<span class="hint-text">—</span>'}</td>
+              <td>${c.email ? `<button class="contact-email-btn" type="button" data-copy-email="${escapeHtml(c.email)}" title="点击复制邮箱">${escapeHtml(c.email)}</button>` : '<span class="hint-text">—</span>'}</td>
+              <td><span class="hint-text">${escapeHtml(pyHint || c.notes || '—')}</span></td>
+              <td><span class="contact-source-badge ${srcCls}">${srcLabel}</span></td>
+              <td style="text-align:right;white-space:nowrap;">
+                <button class="glass-btn" type="button" data-edit-contact="${escapeHtml(c.id)}" style="padding:4px 9px;font-size:11.5px;">编辑</button>
+                <button class="glass-btn danger" type="button" data-del-contact="${escapeHtml(c.id)}" style="padding:4px 9px;font-size:11.5px;">删除</button>
+              </td>
+            </tr>
+          `;
+        }).join('');
+
+        tbody.querySelectorAll('[data-copy-email]').forEach(btn => {
+          btn.addEventListener('click', async () => {
+            const email = btn.dataset.copyEmail || '';
+            if (!email) return;
+            try {
+              await navigator.clipboard?.writeText(email);
+              showToast(`已复制邮箱：${email}`);
+            } catch (_) {
+              showToast(email);
+            }
+          });
+        });
+        tbody.querySelectorAll('[data-edit-contact]').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const c = settingsState.contacts.find(item => item.id === btn.dataset.editContact);
+            if (c) openContactForm(c);
+          });
+        });
+        tbody.querySelectorAll('[data-del-contact]').forEach(btn => {
+          btn.addEventListener('click', async () => {
+            const c = settingsState.contacts.find(item => item.id === btn.dataset.delContact);
+            if (!c) return;
+            if (!window.confirm(`确定删除联系人「${c.name}」吗？`)) return;
+            try {
+              await apiJson(`/api/contacts/${encodeURIComponent(c.id)}`, { method: 'DELETE' });
+              showToast(`已删除联系人「${c.name}」`);
+              await loadContacts();
+            } catch (err) {
+              showToast(`删除失败：${err.message}`);
+            }
+          });
+        });
+      }
+
+      function openContactForm(contact = null) {
+        const card = document.getElementById('contact-form-card');
+        const titleEl = document.getElementById('contact-form-title');
+        if (!card) return;
+        document.getElementById('contact-import-card')?.classList.remove('open');
+        settingsState.contactEditingId = contact ? contact.id : null;
+        if (titleEl) titleEl.textContent = contact ? `编辑联系人：${contact.name}` : '新增联系人';
+        document.getElementById('contact-field-name').value = contact?.name || '';
+        document.getElementById('contact-field-dept').value = contact?.department || '';
+        document.getElementById('contact-field-email').value = contact?.email || '';
+        document.getElementById('contact-field-aliases').value = contact?.aliases || '';
+        document.getElementById('contact-field-notes').value = contact?.notes || '';
+        card.classList.add('open');
+        document.getElementById('contact-field-name')?.focus();
+      }
+
+      function closeContactForm() {
+        settingsState.contactEditingId = null;
+        document.getElementById('contact-form-card')?.classList.remove('open');
+      }
+
+      async function saveContactForm() {
+        const name = (document.getElementById('contact-field-name')?.value || '').trim();
+        if (!name) {
+          showToast('请填写联系人姓名');
+          return;
+        }
+        const payload = {
+          name,
+          department: (document.getElementById('contact-field-dept')?.value || '').trim(),
+          email: (document.getElementById('contact-field-email')?.value || '').trim(),
+          aliases: (document.getElementById('contact-field-aliases')?.value || '').trim(),
+          notes: (document.getElementById('contact-field-notes')?.value || '').trim(),
+          source: 'manual'
+        };
+        const editingId = settingsState.contactEditingId;
+        try {
+          if (editingId) {
+            const existing = settingsState.contacts.find(c => c.id === editingId);
+            if (existing?.source) payload.source = existing.source;
+            if (existing?.externalId) payload.externalId = existing.externalId;
+            await apiJson(`/api/contacts/${encodeURIComponent(editingId)}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload)
+            });
+            showToast(`已更新联系人「${name}」`);
+          } else {
+            await apiJson('/api/contacts', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload)
+            });
+            showToast(`已新增联系人「${name}」`);
+          }
+          closeContactForm();
+          await loadContacts();
+        } catch (err) {
+          showToast(`保存失败：${err.message}`);
+        }
+      }
+
+      async function syncLarkContacts() {
+        const btn = document.getElementById('contacts-lark-sync-btn');
+        if (btn) {
+          btn.disabled = true;
+          btn.textContent = '⏳ 正在从飞书同步...';
+        }
+        try {
+          const res = await apiJson('/api/contacts/lark/sync', { method: 'POST' });
+          showToast(`飞书同步完成：新增 ${res.inserted || 0} 人，更新 ${res.updated || 0} 人（共 ${res.total || 0} 人）`);
+          await Promise.all([loadContacts(), loadLarkStatus()]);
+        } catch (err) {
+          showToast(`飞书同步失败：${err.message}`);
+          await loadLarkStatus().catch(() => {});
+        } finally {
+          if (btn) {
+            btn.disabled = false;
+            btn.textContent = '🔄 从飞书同步';
+          }
+        }
+      }
+
+      async function submitContactsImport() {
+        const raw = (document.getElementById('contact-import-text')?.value || '').trim();
+        const mode = document.getElementById('contact-import-mode')?.value || 'merge';
+        if (!raw) {
+          showToast('请先选择文件或粘贴 CSV / JSON 内容');
+          return;
+        }
+        let bodyObj;
+        if (raw.startsWith('[') || raw.startsWith('{')) {
+          try {
+            const parsed = JSON.parse(raw);
+            const arr = Array.isArray(parsed) ? parsed : (Array.isArray(parsed.contacts) ? parsed.contacts : null);
+            if (!arr) throw new Error('JSON 须为联系人数组或包含 contacts 字段的对象');
+            bodyObj = { contacts: arr, mode, source: 'import' };
+          } catch (err) {
+            showToast(`JSON 解析失败：${err.message}`);
+            return;
+          }
+        } else {
+          bodyObj = { csvText: raw, mode, source: 'import' };
+        }
+        try {
+          const res = await apiJson('/api/contacts/import', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(bodyObj)
+          });
+          showToast(`导入成功：新增 ${res.inserted || 0} 人，更新 ${res.updated || 0} 人（共 ${res.total || 0} 人）`);
+          document.getElementById('contact-import-card')?.classList.remove('open');
+          await loadContacts();
+        } catch (err) {
+          showToast(`导入失败：${err.message}`);
+        }
+      }
+
+      function bindContactsEvents() {
+        document.getElementById('contacts-search-input')?.addEventListener('input', e => {
+          settingsState.contactSearch = e.target.value || '';
+          renderContacts();
+        });
+        document.getElementById('contacts-dept-filter')?.addEventListener('change', e => {
+          settingsState.contactDept = e.target.value || '';
+          renderContacts();
+        });
+        document.getElementById('contact-add-toggle-btn')?.addEventListener('click', () => {
+          const card = document.getElementById('contact-form-card');
+          if (card?.classList.contains('open') && !settingsState.contactEditingId) closeContactForm();
+          else openContactForm(null);
+        });
+        document.getElementById('contact-form-cancel-btn')?.addEventListener('click', () => closeContactForm());
+        document.getElementById('contact-form-save-btn')?.addEventListener('click', () => saveContactForm());
+        document.getElementById('contacts-lark-sync-btn')?.addEventListener('click', () => syncLarkContacts());
+
+        const importCard = document.getElementById('contact-import-card');
+        document.getElementById('contacts-import-toggle-btn')?.addEventListener('click', () => {
+          closeContactForm();
+          importCard?.classList.toggle('open');
+        });
+        document.getElementById('contact-import-cancel-btn')?.addEventListener('click', () => {
+          importCard?.classList.remove('open');
+        });
+        const fileInp = document.getElementById('contact-import-file');
+        document.getElementById('contact-import-pick-btn')?.addEventListener('click', () => fileInp?.click());
+        fileInp?.addEventListener('change', async e => {
+          const file = e.target.files?.[0];
+          if (!file) return;
+          try {
+            const text = await file.text();
+            document.getElementById('contact-import-text').value = text;
+            const lbl = document.getElementById('contact-import-file-label');
+            if (lbl) lbl.textContent = `已加载：${file.name}`;
+          } catch (err) {
+            showToast(`读取文件失败：${err.message}`);
+          }
+          e.target.value = '';
+        });
+        document.getElementById('contact-import-submit-btn')?.addEventListener('click', () => submitContactsImport());
+      }
+
       // ---------- Boot ----------
       bindEvents();
+      bindContactsEvents();
       const hashTab = (window.location.hash || '').replace('#', '');
-      if (['timemachine', 'backup', 'storage', 'prefs', 'ai', 'ai-settings', 'mcp'].includes(hashTab)) {
+      if (['timemachine', 'backup', 'storage', 'prefs', 'ai', 'ai-settings', 'contacts', 'mcp'].includes(hashTab)) {
         activateTab(hashTab, { scrollToAi: hashTab === 'ai' || hashTab === 'ai-settings' });
       }
       refreshAll().catch(err => {

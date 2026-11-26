@@ -4,9 +4,14 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import copy
+import csv
 import hashlib
+import io
 import json
+import mimetypes
+import os
 import queue
 import re
 import secrets
@@ -23,9 +28,10 @@ import uuid
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 from urllib.parse import parse_qs, quote, unquote, urlencode, urlparse
 
+from mindbubble_rag import MindBubbleRagEngine
 from mindbubble_mcp_core import (
     DEFAULT_DB_PATH as _MCP_DEFAULT_DB_PATH,
     McpJsonRpcHandler,
@@ -44,8 +50,16 @@ BASE_DIR = Path(__file__).resolve().parent
 HTML_PATH = BASE_DIR / "mind-bubble-todo.html"
 SETTINGS_HTML_PATH = BASE_DIR / "mind-bubble-settings.html"
 DEFAULT_DB_PATH = BASE_DIR / "data" / "mindbubble.sqlite"
+ATTACHMENTS_DIR = BASE_DIR / "data" / "attachments"
+MAX_ATTACHMENT_BYTES = 15 * 1024 * 1024
+ATT_ID_RE = re.compile(r"^att_[a-f0-9]{12,32}$")
+CONTACT_ID_RE = re.compile(r"^[A-Za-z0-9_-]{3,64}$")
+_FOCUS_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+_SCRIPT_TAG_RE = re.compile(r"(?is)<(?:script|iframe|object|embed|style)\b[^>]*>.*?</(?:script|iframe|object|embed|style)>|<(?:script|iframe|object|embed)\b[^>]*?/?>")
+_EVENT_HANDLER_RE = re.compile(r"(?is)\s+on[a-z]+\s*=\s*(?:\"[^\"]*\"|'[^']*'|[^\s>]+)")
+_JS_PROTO_RE = re.compile(r"(?is)(?:javascript|vbscript)\s*:")
 AGY_WORKDIR = BASE_DIR / "data" / "mindbubble-agy-workdir"
-DEFAULT_AGY_MODEL = "gemini-4-hydrogen-medium"
+DEFAULT_AGY_MODEL = "gemini-pro-orchestrator-neon"
 _ANSI_ESCAPE_RE = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
 _MODEL_LINE_RE = re.compile(r"^([a-z0-9][a-z0-9._-]{2,})\s+(.+)$")
 
@@ -172,10 +186,195 @@ def _sanitize_galaxies(raw_galaxies: Any, fallback_prefs_galaxies: Any = None) -
     return result
 
 
+def _sanitize_rich_html_server(raw_html: Any) -> str:
+    if not isinstance(raw_html, str) or not raw_html.strip():
+        return ""
+    cleaned = _SCRIPT_TAG_RE.sub("", raw_html)
+    cleaned = _EVENT_HANDLER_RE.sub("", cleaned)
+    cleaned = _JS_PROTO_RE.sub("blocked:", cleaned)
+    return cleaned[:250_000]
+
+
+_GBK_PINYIN_BOUNDARIES: tuple[tuple[int, str], ...] = (
+    (0xB0A1, "a"),
+    (0xB0C5, "b"),
+    (0xB2C1, "c"),
+    (0xB4EE, "d"),
+    (0xB6EA, "e"),
+    (0xB7A2, "f"),
+    (0xB8C1, "g"),
+    (0xB9FE, "h"),
+    (0xBBF7, "j"),
+    (0xBFA6, "k"),
+    (0xC0AC, "l"),
+    (0xC2E8, "m"),
+    (0xC4C3, "n"),
+    (0xC5B6, "o"),
+    (0xC5BE, "p"),
+    (0xC6DA, "q"),
+    (0xC8BB, "r"),
+    (0xC8F6, "s"),
+    (0xCBFA, "t"),
+    (0xCDDA, "w"),
+    (0xCEF4, "x"),
+    (0xD1B9, "y"),
+    (0xD4D1, "z"),
+)
+
+
+def _chinese_pinyin_initials(text: str) -> str:
+    """Compute lowercase ASCII initials for Chinese + ASCII text using GB2312 byte boundaries."""
+    out: list[str] = []
+    for ch in str(text or "").strip():
+        if "a" <= ch <= "z" or "A" <= ch <= "Z" or "0" <= ch <= "9":
+            out.append(ch.lower())
+            continue
+        if "\u4e00" <= ch <= "\u9fff":
+            try:
+                raw = ch.encode("gbk")
+            except UnicodeEncodeError:
+                continue
+            if len(raw) == 2 and raw[0] >= 0xB0:
+                code = (raw[0] << 8) + raw[1]
+                if code <= 0xD7F9:
+                    letter = "z"
+                    for idx in range(len(_GBK_PINYIN_BOUNDARIES) - 1, -1, -1):
+                        bound, py = _GBK_PINYIN_BOUNDARIES[idx]
+                        if code >= bound:
+                            letter = py
+                            break
+                    out.append(letter)
+    return "".join(out)
+
+
+def _extract_email_pinyin_tokens(email: str) -> str:
+    local = str(email or "").strip().lower().split("@", 1)[0]
+    if not local:
+        return ""
+    parts = [p for p in re.split(r"[._+\-]+", local) if p]
+    tokens = list(dict.fromkeys([*parts, "".join(parts)]))
+    return " ".join(tokens)
+
+
+def _normalize_contact_payload(raw: Any, default_source: str = "manual") -> dict[str, str]:
+    if not isinstance(raw, dict):
+        raise ValueError("联系人数据必须是 JSON 对象")
+    name = str(raw.get("name") or raw.get("localized_name") or "").strip()[:120]
+    if not name:
+        raise ValueError("联系人姓名不能为空")
+    department = str(raw.get("department") or raw.get("dept") or "").strip()[:200]
+    email = str(raw.get("email") or raw.get("enterprise_email") or "").strip()[:200]
+    aliases = str(raw.get("aliases") or raw.get("alias") or "").strip()[:200]
+    raw_pinyin = str(raw.get("pinyin") or "").strip()[:200]
+    email_tokens = _extract_email_pinyin_tokens(email)
+    pinyin = raw_pinyin or email_tokens
+    if raw_pinyin and email_tokens and email_tokens not in raw_pinyin.lower():
+        pinyin = f"{raw_pinyin} {email_tokens}".strip()[:200]
+    raw_initials = str(raw.get("initials") or "").strip().lower()[:64]
+    initials = raw_initials or _chinese_pinyin_initials(name)[:64]
+    src_raw = str(raw.get("source") or default_source or "manual").strip().lower()
+    source = src_raw if src_raw in ("manual", "lark", "import") else "manual"
+    external_id = str(raw.get("externalId") or raw.get("external_id") or raw.get("open_id") or raw.get("openId") or "").strip()[:120]
+    notes = str(raw.get("notes") or "").strip()[:500]
+    return {
+        "name": name,
+        "department": department,
+        "email": email,
+        "pinyin": pinyin,
+        "initials": initials,
+        "aliases": aliases,
+        "source": source,
+        "externalId": external_id,
+        "notes": notes,
+    }
+
+
+def _parse_contacts_csv(csv_text: str) -> list[dict[str, Any]]:
+    text = str(csv_text or "").lstrip("\ufeff").strip()
+    if not text:
+        return []
+    reader = csv.DictReader(io.StringIO(text))
+    if not reader.fieldnames:
+        return []
+
+    def _pick(row: dict[str, Any], *keys: str) -> str:
+        lower_map = {str(k or "").strip().lower(): v for k, v in row.items() if k is not None}
+        for k in keys:
+            val = lower_map.get(k.lower())
+            if val is not None and str(val).strip():
+                return str(val).strip()
+        return ""
+
+    items: list[dict[str, Any]] = []
+    for row in reader:
+        if not isinstance(row, dict):
+            continue
+        name = _pick(row, "name", "姓名", "名字", "localized_name")
+        if not name:
+            continue
+        items.append(
+            {
+                "name": name,
+                "department": _pick(row, "department", "部门", "dept"),
+                "email": _pick(row, "email", "邮箱", "企业邮箱", "enterprise_email", "mail"),
+                "aliases": _pick(row, "aliases", "alias", "别名", "昵称"),
+                "pinyin": _pick(row, "pinyin", "拼音"),
+                "initials": _pick(row, "initials", "拼音首字母", "首字母"),
+                "source": _pick(row, "source", "来源") or "import",
+                "externalId": _pick(row, "external_id", "externalid", "open_id", "openid"),
+                "notes": _pick(row, "notes", "备注"),
+            }
+        )
+    return items
+
+
 def _sanitize_bubble_workspace_fields(nt: dict[str, Any]) -> None:
-    """Normalize per-bubble persistent notebook, checklist, AI history, and activity log."""
+    """Normalize per-bubble persistent notebook, rich HTML, focusDate, attachments, checklist, AI history, and activity log."""
+    raw_fd = nt.get("focusDate")
+    nt["focusDate"] = raw_fd.strip() if isinstance(raw_fd, str) and _FOCUS_DATE_RE.match(raw_fd.strip()) else ""
+
     raw_nb = nt.get("notebook")
     nt["notebook"] = str(raw_nb)[:100_000] if isinstance(raw_nb, str) else ""
+    nt["notebookHtml"] = _sanitize_rich_html_server(nt.get("notebookHtml"))
+
+    clean_atts: list[dict[str, Any]] = []
+    raw_atts = nt.get("attachments")
+    if isinstance(raw_atts, list):
+        for att in raw_atts[:60]:
+            if not isinstance(att, dict):
+                continue
+            aid = str(att.get("id") or "").strip()[:64]
+            name = str(att.get("name") or "").strip()[:180]
+            if not aid or not name:
+                continue
+            mime = str(att.get("mimeType") or "application/octet-stream").strip()[:120]
+            raw_sz = att.get("size")
+            size = int(raw_sz) if isinstance(raw_sz, (int, float)) and not isinstance(raw_sz, bool) and raw_sz >= 0 else 0
+            storage = "inline" if att.get("storage") == "inline" else "server"
+            url = str(att.get("url") or "").strip()[:512]
+            if storage == "server" and url and not url.startswith("/api/attachments/"):
+                url = f"/api/attachments/{aid}"
+            raw_data_url = att.get("dataUrl")
+            data_url = ""
+            if storage == "inline" and isinstance(raw_data_url, str) and raw_data_url.startswith("data:") and len(raw_data_url) <= 3_200_000:
+                data_url = raw_data_url
+            raw_cat = att.get("createdAt")
+            created_at = int(raw_cat) if isinstance(raw_cat, (int, float)) and not isinstance(raw_cat, bool) and raw_cat > 0 else 0
+            kind = "image" if (att.get("kind") == "image" or mime.startswith("image/")) else "file"
+            entry: dict[str, Any] = {
+                "id": aid,
+                "name": name,
+                "mimeType": mime,
+                "size": size,
+                "url": url,
+                "kind": kind,
+                "createdAt": created_at,
+                "storage": storage,
+            }
+            if data_url:
+                entry["dataUrl"] = data_url
+            clean_atts.append(entry)
+    nt["attachments"] = clean_atts
 
     clean_cl: list[dict[str, Any]] = []
     raw_cl = nt.get("checklist")
@@ -221,6 +420,27 @@ def _sanitize_bubble_workspace_fields(nt: dict[str, Any]) -> None:
                 for s in (msg.get("suggestedSteps") or [])[:12]
                 if isinstance(s, str) and str(s).strip()
             ]
+            raw_elapsed = msg.get("elapsedMs")
+            elapsed_ms = int(raw_elapsed) if isinstance(raw_elapsed, (int, float)) and not isinstance(raw_elapsed, bool) and raw_elapsed > 0 else 0
+            is_err = bool(msg.get("error"))
+            clean_rag_sources: list[dict[str, Any]] = []
+            raw_rag = msg.get("ragSources")
+            if isinstance(raw_rag, list):
+                for src in raw_rag[:12]:
+                    if not isinstance(src, dict):
+                        continue
+                    s_title = str(src.get("title") or "").strip()[:160]
+                    if not s_title:
+                        continue
+                    clean_rag_sources.append({
+                        "sourceType": str(src.get("sourceType") or "")[:32],
+                        "sourceId": str(src.get("sourceId") or "")[:64],
+                        "taskId": str(src.get("taskId") or "")[:64],
+                        "title": s_title,
+                        "galaxyName": str(src.get("galaxyName") or "")[:40],
+                        "snippet": str(src.get("snippet") or "")[:200],
+                        "matchReasons": [str(r)[:32] for r in (src.get("matchReasons") or [])[:4] if str(r).strip()],
+                    })
             clean_ai.append({
                 "id": str(msg.get("id") or f"ai_{len(clean_ai)+1}")[:64],
                 "role": role,
@@ -229,6 +449,11 @@ def _sanitize_bubble_workspace_fields(nt: dict[str, Any]) -> None:
                 "model": str(msg.get("model") or "")[:80],
                 "engine": str(msg.get("engine") or "")[:32],
                 "suggestedSteps": steps,
+                "conversationId": str(msg.get("conversationId") or "")[:80],
+                "elapsedMs": elapsed_ms,
+                "error": is_err,
+                "retryQuestion": str(msg.get("retryQuestion") or "")[:3000] if is_err else "",
+                "ragSources": clean_rag_sources,
             })
     nt["aiHistory"] = clean_ai
 
@@ -328,6 +553,8 @@ def compute_counts(state: dict[str, Any]) -> tuple[int, int, int, int]:
 
 def _task_signature(t: dict[str, Any]) -> tuple[Any, ...]:
     nb = t.get("notebook") or ""
+    nb_html = t.get("notebookHtml") or ""
+    atts = tuple(a.get("id") for a in (t.get("attachments") or []) if isinstance(a, dict))
     cl = tuple((c.get("id"), c.get("text"), bool(c.get("done"))) for c in (t.get("checklist") or []) if isinstance(c, dict))
     ai_hist = t.get("aiHistory") or []
     act_log = t.get("activityLog") or []
@@ -342,7 +569,10 @@ def _task_signature(t: dict[str, Any]) -> tuple[Any, ...]:
         t.get("clusterId"),
         t.get("galaxyId"),
         t.get("dueAt"),
+        t.get("focusDate") or "",
         hashlib.sha1(str(nb).encode("utf-8", errors="ignore")).hexdigest(),
+        hashlib.sha1(str(nb_html).encode("utf-8", errors="ignore")).hexdigest(),
+        atts,
         cl,
         len(ai_hist),
         ai_hist[-1].get("id") if ai_hist and isinstance(ai_hist[-1], dict) else None,
@@ -433,7 +663,19 @@ class MindBubbleStore:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.Lock()
         self._conn = sqlite3.connect(str(self.db_path), check_same_thread=False)
+        self._on_change_callbacks: list[Callable[[str], None]] = []
         self._init_db()
+
+    def add_change_listener(self, cb: Callable[[str], None]) -> None:
+        if callable(cb) and cb not in self._on_change_callbacks:
+            self._on_change_callbacks.append(cb)
+
+    def _notify_changed(self, reason: str = "") -> None:
+        for cb in list(self._on_change_callbacks):
+            try:
+                cb(reason)
+            except Exception:
+                pass
 
     def _init_db(self) -> None:
         with self._lock:
@@ -509,6 +751,40 @@ class MindBubbleStore:
             self._conn.execute(
                 "INSERT OR IGNORE INTO gdrive_config (id) VALUES (1);"
             )
+            self._conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS attachments (
+                    id TEXT PRIMARY KEY,
+                    task_id TEXT NOT NULL DEFAULT '',
+                    name TEXT NOT NULL,
+                    mime_type TEXT NOT NULL,
+                    size INTEGER NOT NULL,
+                    rel_path TEXT NOT NULL,
+                    created_at INTEGER NOT NULL
+                );
+                """
+            )
+            self._conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS contacts (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    department TEXT NOT NULL DEFAULT '',
+                    email TEXT NOT NULL DEFAULT '',
+                    pinyin TEXT NOT NULL DEFAULT '',
+                    initials TEXT NOT NULL DEFAULT '',
+                    aliases TEXT NOT NULL DEFAULT '',
+                    source TEXT NOT NULL DEFAULT 'manual',
+                    external_id TEXT NOT NULL DEFAULT '',
+                    notes TEXT NOT NULL DEFAULT '',
+                    created_at INTEGER NOT NULL DEFAULT 0,
+                    updated_at INTEGER NOT NULL DEFAULT 0
+                );
+                """
+            )
+            self._conn.execute("CREATE INDEX IF NOT EXISTS idx_contacts_name ON contacts(name);")
+            self._conn.execute("CREATE INDEX IF NOT EXISTS idx_contacts_email ON contacts(email);")
+            self._conn.execute("CREATE INDEX IF NOT EXISTS idx_contacts_ext ON contacts(external_id);")
             self._conn.commit()
 
     def _get_config_locked(self) -> dict[str, Any]:
@@ -634,12 +910,14 @@ class MindBubbleStore:
         with self._lock:
             _, rev, updated_at = self._get_live_state_locked()
             snap_count = int(self._conn.execute("SELECT COUNT(*) FROM snapshots").fetchone()[0])
+            contacts_count = int(self._conn.execute("SELECT COUNT(*) FROM contacts").fetchone()[0])
         return {
             "ok": True,
             "db": str(self.db_path),
             "revision": rev,
             "updatedAt": updated_at,
             "snapshotCount": snap_count,
+            "contactsCount": contacts_count,
         }
 
     def get_state(self) -> dict[str, Any]:
@@ -670,6 +948,7 @@ class MindBubbleStore:
                 created_at=now_ms,
             )
             self._conn.commit()
+        self._notify_changed(label)
         return {
             "ok": True,
             "revision": new_rev,
@@ -693,6 +972,7 @@ class MindBubbleStore:
             empty = copy.deepcopy(EMPTY_STATE)
             new_rev, updated_at = self._upsert_live_locked(empty, now_ms)
             self._conn.commit()
+        self._notify_changed("清空工作区")
         return {
             "ok": True,
             "revision": new_rev,
@@ -820,6 +1100,7 @@ class MindBubbleStore:
             new_rev, updated_at = self._upsert_live_locked(target_state, now_ms + 1)
             self._conn.commit()
 
+        self._notify_changed(f"恢复快照 #{snapshot_id}")
         return {
             "ok": True,
             "revision": new_rev,
@@ -882,6 +1163,7 @@ class MindBubbleStore:
                 FROM snapshots
                 """
             ).fetchone()
+            contacts_count = int(self._conn.execute("SELECT COUNT(*) FROM contacts").fetchone()[0])
 
         db_bytes = 0
         for suffix in ("", "-wal", "-shm"):
@@ -895,6 +1177,7 @@ class MindBubbleStore:
             "dbSizeBytes": db_bytes,
             "revision": rev,
             "updatedAt": updated_at,
+            "contactsCount": contacts_count,
             "liveCounts": {
                 "tasks": t_count,
                 "completed": comp_count,
@@ -952,6 +1235,7 @@ class MindBubbleStore:
                     meta["state"] = sanitize_state(json.loads(r[11]))
                     snaps_out.append(meta)
 
+        contacts_out = self.list_contacts().get("contacts", [])
         return {
             "format": "mindbubble-backup",
             "version": 2,
@@ -961,6 +1245,7 @@ class MindBubbleStore:
             "backupConfig": cfg,
             "currentState": live_state,
             "snapshots": snaps_out,
+            "contacts": contacts_out,
         }
 
     def import_backup(self, data: Any, mode: str = "merge") -> dict[str, Any]:
@@ -1039,6 +1324,10 @@ class MindBubbleStore:
             )
             self._conn.commit()
 
+        raw_contacts = data.get("contacts") if isinstance(data.get("contacts"), list) else []
+        if raw_contacts:
+            self.import_contacts(raw_contacts, mode="merge", default_source="import")
+
         return {
             "ok": True,
             "revision": new_rev,
@@ -1107,6 +1396,428 @@ class MindBubbleStore:
             ).fetchone()
             return {col: row[idx] for idx, col in enumerate(self._GDRIVE_COLUMNS)}
 
+    def save_attachment(
+        self,
+        name: str,
+        mime_type: str,
+        raw_bytes: bytes,
+        task_id: str = "",
+    ) -> dict[str, Any]:
+        if not isinstance(raw_bytes, (bytes, bytearray)) or len(raw_bytes) == 0:
+            raise ValueError("Attachment data is empty")
+        if len(raw_bytes) > MAX_ATTACHMENT_BYTES:
+            raise OverflowError(f"Attachment exceeds {MAX_ATTACHMENT_BYTES // (1024 * 1024)} MB limit")
+
+        clean_name = Path(str(name or "attachment")).name.strip()[:180] or "attachment"
+        clean_mime = str(mime_type or "").split(";")[0].strip()[:120]
+        if not clean_mime:
+            clean_mime = mimetypes.guess_type(clean_name)[0] or "application/octet-stream"
+
+        att_id = f"att_{secrets.token_hex(8)}"
+        ext = Path(clean_name).suffix[:16]
+        if not re.match(r"^\.[A-Za-z0-9_-]{1,15}$", ext):
+            guessed_ext = mimetypes.guess_extension(clean_mime) or ""
+            ext = guessed_ext if re.match(r"^\.[A-Za-z0-9_-]{1,15}$", guessed_ext) else ".bin"
+
+        att_dir = self.db_path.parent / "attachments"
+        att_dir.mkdir(parents=True, exist_ok=True)
+        rel_name = f"{att_id}{ext}"
+        dest_path = att_dir / rel_name
+        tmp_path = att_dir / f"{rel_name}.tmp"
+        tmp_path.write_bytes(bytes(raw_bytes))
+        os.replace(tmp_path, dest_path)
+
+        now_ms = int(time.time() * 1000)
+        size = len(raw_bytes)
+        clean_task_id = str(task_id or "").strip()[:64]
+        with self._lock:
+            self._conn.execute(
+                """
+                INSERT INTO attachments (id, task_id, name, mime_type, size, rel_path, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (att_id, clean_task_id, clean_name, clean_mime, size, rel_name, now_ms),
+            )
+            self._conn.commit()
+
+        self._notify_changed(f"上传附件 {clean_name}")
+        kind = "image" if clean_mime.startswith("image/") else "file"
+        return {
+            "id": att_id,
+            "name": clean_name,
+            "mimeType": clean_mime,
+            "size": size,
+            "url": f"/api/attachments/{att_id}",
+            "kind": kind,
+            "createdAt": now_ms,
+            "storage": "server",
+        }
+
+    def get_attachment(self, att_id: str) -> tuple[dict[str, Any], bytes] | None:
+        if not isinstance(att_id, str) or not ATT_ID_RE.match(att_id):
+            return None
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT id, task_id, name, mime_type, size, rel_path, created_at FROM attachments WHERE id = ?",
+                (att_id,),
+            ).fetchone()
+        if not row:
+            return None
+        file_path = self.db_path.parent / "attachments" / row[5]
+        if not file_path.exists():
+            return None
+        meta = {
+            "id": row[0],
+            "taskId": row[1],
+            "name": row[2],
+            "mimeType": row[3],
+            "size": row[4],
+            "createdAt": row[6],
+        }
+        return meta, file_path.read_bytes()
+
+    def delete_attachment(self, att_id: str) -> bool:
+        if not isinstance(att_id, str) or not ATT_ID_RE.match(att_id):
+            return False
+        with self._lock:
+            row = self._conn.execute("SELECT rel_path FROM attachments WHERE id = ?", (att_id,)).fetchone()
+            if not row:
+                return False
+            rel_path = row[0]
+            self._conn.execute("DELETE FROM attachments WHERE id = ?", (att_id,))
+            self._conn.commit()
+        file_path = self.db_path.parent / "attachments" / rel_path
+        if file_path.exists():
+            try:
+                file_path.unlink()
+            except OSError:
+                pass
+        self._notify_changed(f"删除附件 {att_id}")
+        return True
+
+    @staticmethod
+    def _row_to_contact(row: tuple[Any, ...]) -> dict[str, Any]:
+        return {
+            "id": str(row[0]),
+            "name": str(row[1]),
+            "department": str(row[2] or ""),
+            "email": str(row[3] or ""),
+            "pinyin": str(row[4] or ""),
+            "initials": str(row[5] or ""),
+            "aliases": str(row[6] or ""),
+            "source": str(row[7] or "manual"),
+            "externalId": str(row[8] or ""),
+            "notes": str(row[9] or ""),
+            "createdAt": int(row[10] or 0),
+            "updatedAt": int(row[11] or 0),
+        }
+
+    def list_contacts(self, query: str = "", department: str = "") -> dict[str, Any]:
+        q = str(query or "").strip().lower()
+        dept_filter = str(department or "").strip()
+        with self._lock:
+            rows = self._conn.execute(
+                """
+                SELECT id, name, department, email, pinyin, initials, aliases, source, external_id, notes, created_at, updated_at
+                FROM contacts
+                ORDER BY department COLLATE NOCASE ASC, name COLLATE NOCASE ASC
+                """
+            ).fetchall()
+
+        all_items = [self._row_to_contact(r) for r in rows]
+        departments = sorted({c["department"] for c in all_items if c["department"]})
+
+        filtered: list[dict[str, Any]] = []
+        for c in all_items:
+            if dept_filter and c["department"] != dept_filter:
+                continue
+            if q:
+                hay = " ".join(
+                    [c["name"], c["department"], c["email"], c["pinyin"], c["initials"], c["aliases"], c["notes"]]
+                ).lower()
+                if q not in hay:
+                    continue
+            filtered.append(c)
+
+        return {
+            "ok": True,
+            "contacts": filtered,
+            "total": len(all_items),
+            "filtered": len(filtered),
+            "departments": departments,
+        }
+
+    def upsert_contact(self, data: Any, contact_id: str | None = None) -> dict[str, Any]:
+        norm = _normalize_contact_payload(data, default_source="manual")
+        now_ms = int(time.time() * 1000)
+        with self._lock:
+            if contact_id is not None:
+                if not CONTACT_ID_RE.match(contact_id):
+                    raise ValueError("Invalid contact ID")
+                existing = self._conn.execute(
+                    "SELECT created_at FROM contacts WHERE id = ?",
+                    (contact_id,),
+                ).fetchone()
+                if not existing:
+                    raise LookupError("Contact not found")
+                self._conn.execute(
+                    """
+                    UPDATE contacts
+                    SET name = ?, department = ?, email = ?, pinyin = ?, initials = ?,
+                        aliases = ?, source = ?, external_id = ?, notes = ?, updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (
+                        norm["name"],
+                        norm["department"],
+                        norm["email"],
+                        norm["pinyin"],
+                        norm["initials"],
+                        norm["aliases"],
+                        norm["source"],
+                        norm["externalId"],
+                        norm["notes"],
+                        now_ms,
+                        contact_id,
+                    ),
+                )
+                cid = contact_id
+            else:
+                cid = f"ct_{secrets.token_hex(6)}"
+                self._conn.execute(
+                    """
+                    INSERT INTO contacts (
+                        id, name, department, email, pinyin, initials, aliases,
+                        source, external_id, notes, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        cid,
+                        norm["name"],
+                        norm["department"],
+                        norm["email"],
+                        norm["pinyin"],
+                        norm["initials"],
+                        norm["aliases"],
+                        norm["source"],
+                        norm["externalId"],
+                        norm["notes"],
+                        now_ms,
+                        now_ms,
+                    ),
+                )
+            self._conn.commit()
+            row = self._conn.execute(
+                """
+                SELECT id, name, department, email, pinyin, initials, aliases, source, external_id, notes, created_at, updated_at
+                FROM contacts WHERE id = ?
+                """,
+                (cid,),
+            ).fetchone()
+        self._notify_changed(f"更新联系人 {norm['name']}")
+        return {"ok": True, "contact": self._row_to_contact(row)}
+
+    def import_contacts(
+        self,
+        items: list[dict[str, Any]],
+        mode: str = "merge",
+        default_source: str = "import",
+    ) -> dict[str, Any]:
+        if mode not in ("merge", "replace", "replace_source"):
+            raise ValueError("mode must be 'merge', 'replace', or 'replace_source'")
+        if not isinstance(items, list):
+            raise ValueError("contacts must be a list")
+
+        now_ms = int(time.time() * 1000)
+        inserted = 0
+        updated = 0
+        skipped = 0
+
+        with self._lock:
+            if mode == "replace":
+                self._conn.execute("DELETE FROM contacts")
+            elif mode == "replace_source":
+                src_clean = default_source if default_source in ("manual", "lark", "import") else "import"
+                self._conn.execute("DELETE FROM contacts WHERE source = ?", (src_clean,))
+
+            existing_rows = self._conn.execute(
+                """
+                SELECT id, name, department, email, pinyin, initials, aliases, source, external_id, notes, created_at, updated_at
+                FROM contacts
+                """
+            ).fetchall()
+            by_ext: dict[str, dict[str, Any]] = {}
+            by_email: dict[str, dict[str, Any]] = {}
+            by_name_dept: dict[tuple[str, str], dict[str, Any]] = {}
+
+            def _index_contact(c: dict[str, Any]) -> None:
+                if c["externalId"]:
+                    by_ext[c["externalId"]] = c
+                if c["email"]:
+                    by_email[c["email"].lower()] = c
+                by_name_dept[(c["name"].lower(), c["department"].lower())] = c
+
+            for r in existing_rows:
+                _index_contact(self._row_to_contact(r))
+
+            for raw in items[:5000]:
+                try:
+                    norm = _normalize_contact_payload(raw, default_source=default_source)
+                except ValueError:
+                    skipped += 1
+                    continue
+
+                match: dict[str, Any] | None = None
+                if norm["externalId"]:
+                    match = by_ext.get(norm["externalId"])
+                if match is None and norm["email"]:
+                    match = by_email.get(norm["email"].lower())
+                if match is None:
+                    match = by_name_dept.get((norm["name"].lower(), norm["department"].lower()))
+
+                if match is not None:
+                    merged_aliases = match["aliases"] or norm["aliases"]
+                    if norm["aliases"] and match["aliases"] and norm["aliases"] != match["aliases"]:
+                        merged_aliases = match["aliases"]
+                    merged_notes = match["notes"] or norm["notes"]
+                    merged_dept = norm["department"] or match["department"]
+                    merged_email = norm["email"] or match["email"]
+                    merged_ext = norm["externalId"] or match["externalId"]
+                    merged_pinyin = norm["pinyin"] or match["pinyin"]
+                    merged_initials = norm["initials"] or match["initials"]
+                    merged_src = norm["source"] if norm["source"] == "lark" else (match["source"] or norm["source"])
+
+                    self._conn.execute(
+                        """
+                        UPDATE contacts
+                        SET name = ?, department = ?, email = ?, pinyin = ?, initials = ?,
+                            aliases = ?, source = ?, external_id = ?, notes = ?, updated_at = ?
+                        WHERE id = ?
+                        """,
+                        (
+                            norm["name"],
+                            merged_dept,
+                            merged_email,
+                            merged_pinyin,
+                            merged_initials,
+                            merged_aliases,
+                            merged_src,
+                            merged_ext,
+                            merged_notes,
+                            now_ms,
+                            match["id"],
+                        ),
+                    )
+                    updated_obj = {
+                        **match,
+                        "name": norm["name"],
+                        "department": merged_dept,
+                        "email": merged_email,
+                        "pinyin": merged_pinyin,
+                        "initials": merged_initials,
+                        "aliases": merged_aliases,
+                        "source": merged_src,
+                        "externalId": merged_ext,
+                        "notes": merged_notes,
+                        "updatedAt": now_ms,
+                    }
+                    _index_contact(updated_obj)
+                    updated += 1
+                else:
+                    cid = f"ct_{secrets.token_hex(6)}"
+                    self._conn.execute(
+                        """
+                        INSERT INTO contacts (
+                            id, name, department, email, pinyin, initials, aliases,
+                            source, external_id, notes, created_at, updated_at
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            cid,
+                            norm["name"],
+                            norm["department"],
+                            norm["email"],
+                            norm["pinyin"],
+                            norm["initials"],
+                            norm["aliases"],
+                            norm["source"],
+                            norm["externalId"],
+                            norm["notes"],
+                            now_ms,
+                            now_ms,
+                        ),
+                    )
+                    created_obj = {
+                        "id": cid,
+                        **norm,
+                        "createdAt": now_ms,
+                        "updatedAt": now_ms,
+                    }
+                    _index_contact(created_obj)
+                    inserted += 1
+
+            self._conn.commit()
+            total = int(self._conn.execute("SELECT COUNT(*) FROM contacts").fetchone()[0])
+
+        res = self.list_contacts()
+        self._notify_changed("导入联系人")
+        return {
+            "ok": True,
+            "inserted": inserted,
+            "updated": updated,
+            "skipped": skipped,
+            "total": total,
+            "contacts": res["contacts"],
+            "departments": res["departments"],
+        }
+
+    def delete_contact(self, contact_id: str) -> bool:
+        if not isinstance(contact_id, str) or not CONTACT_ID_RE.match(contact_id):
+            return False
+        with self._lock:
+            cur = self._conn.execute("DELETE FROM contacts WHERE id = ?", (contact_id,))
+            self._conn.commit()
+            deleted = cur.rowcount > 0
+        if deleted:
+            self._notify_changed(f"删除联系人 {contact_id}")
+        return deleted
+
+    def clear_contacts(self, source: str = "") -> dict[str, Any]:
+        src = str(source or "").strip().lower()
+        with self._lock:
+            if src:
+                if src not in ("manual", "lark", "import"):
+                    raise ValueError("source must be 'manual', 'lark', or 'import'")
+                cur = self._conn.execute("DELETE FROM contacts WHERE source = ?", (src,))
+            else:
+                cur = self._conn.execute("DELETE FROM contacts")
+            self._conn.commit()
+            deleted = int(cur.rowcount)
+        if deleted > 0:
+            self._notify_changed("清空联系人")
+        return {"ok": True, "deleted": deleted}
+
+    def export_contacts_csv(self) -> str:
+        items = self.list_contacts().get("contacts", [])
+        buf = io.StringIO()
+        buf.write("\ufeff")
+        writer = csv.writer(buf)
+        writer.writerow(["姓名", "部门", "邮箱", "拼音首字母", "别名", "来源", "external_id", "备注"])
+        for c in items:
+            writer.writerow(
+                [
+                    c["name"],
+                    c["department"],
+                    c["email"],
+                    c["initials"],
+                    c["aliases"],
+                    c["source"],
+                    c["externalId"],
+                    c["notes"],
+                ]
+            )
+        return buf.getvalue()
+
     def close(self) -> None:
         with self._lock:
             self._conn.close()
@@ -1129,17 +1840,19 @@ def _find_agy_bin() -> str | None:
 def _sort_models_fastest_first(models: list[dict[str, str]]) -> list[dict[str, str]]:
     def priority(m: dict[str, str]) -> tuple[int, str]:
         mid = m["id"].lower()
-        if mid == "gemini-4-hydrogen-medium":
+        if mid == "gemini-pro-orchestrator-neon":
             return (0, mid)
-        if mid == "gemini-3.8-flash-low":
+        if mid == "gemini-4-neon-medium":
             return (1, mid)
-        if "hydrogen" in mid:
+        if "orchestrator" in mid:
             return (2, mid)
-        if "flash" in mid and mid.endswith("-low"):
+        if "neon" in mid:
             return (3, mid)
-        if "flash" in mid:
+        if mid == "gemini-4-hydrogen-medium" or "hydrogen" in mid:
             return (4, mid)
-        return (5, mid)
+        if "flash" in mid:
+            return (5, mid)
+        return (6, mid)
 
     indexed = list(enumerate(models))
     indexed.sort(key=lambda item: (priority(item[1])[0], item[0]))
@@ -1151,6 +1864,8 @@ class AgyWorker:
 
     def __init__(self, agy_bin: str, model: str, workdir: Path) -> None:
         self.model = model
+        self.conversation_id: str = ""
+        self.last_used: float = time.monotonic()
         workdir.mkdir(parents=True, exist_ok=True)
         self.proc = subprocess.Popen(
             [
@@ -1210,6 +1925,7 @@ class AgyWorker:
         if not self.is_alive():
             raise RuntimeError("agy worker process is not alive")
         with self._lock:
+            self.last_used = time.monotonic()
             assert self.proc.stdin is not None
             payload = json.dumps({"event": "user", "message": {"content": prompt}}, ensure_ascii=False) + "\n"
             self.proc.stdin.write(payload.encode("utf-8"))
@@ -1238,6 +1954,9 @@ class AgyWorker:
                 except json.JSONDecodeError:
                     continue
 
+                if ev.get("conversation_id"):
+                    self.conversation_id = str(ev["conversation_id"]).strip()
+
                 ev_type = ev.get("event")
                 if ev_type == "step_update":
                     su = ev.get("step_update") or {}
@@ -1247,11 +1966,14 @@ class AgyWorker:
                             chunks.append(delta)
                 elif ev_type == "result":
                     res = ev.get("result") or {}
+                    if res.get("conversation_id"):
+                        self.conversation_id = str(res["conversation_id"]).strip()
                     if res.get("status") != "SUCCESS":
                         raise RuntimeError(res.get("error") or f"agy returned status {res.get('status')}")
                     text = "".join(chunks).strip()
                     if not text:
                         text = str(res.get("response") or res.get("text") or "").strip()
+                    self.last_used = time.monotonic()
                     return text
 
     def close(self) -> None:
@@ -1279,6 +2001,7 @@ class AgyClient:
         self.workdir = workdir
         self._pool_lock = threading.Lock()
         self._worker: AgyWorker | None = None
+        self._bubble_workers: dict[str, AgyWorker] = {}
         self._models_cache: list[dict[str, str]] | None = None
         self._models_cached_at: float = 0.0
 
@@ -1306,6 +2029,8 @@ class AgyClient:
                     m = _MODEL_LINE_RE.match(line)
                     if m:
                         mid, name = m.group(1).strip(), m.group(2).strip()
+                        if mid == "gemini-pro-orchestrator-neon":
+                            name = "Orchestrator (Neon · Gemini 4 Neon Medium)"
                         if mid not in seen:
                             seen.add(mid)
                             parsed.append({"id": mid, "name": name})
@@ -1316,14 +2041,17 @@ class AgyClient:
                 pass
 
         fallback_models = [
+            {"id": "gemini-pro-orchestrator-neon", "name": "Orchestrator (Neon · Gemini 4 Neon Medium)"},
+            {"id": "gemini-4-neon-medium", "name": "Gemini 4 Neon (Medium)"},
+            {"id": "gemini-4-neon-high", "name": "Gemini 4 Neon (High)"},
             {"id": "gemini-4-hydrogen-medium", "name": "Gemini 4 Hydrogen (Medium)"},
             {"id": "gemini-3.8-flash-low", "name": "Gemini 3.8 Flash (Low)"},
-            {"id": "gemini-4-neon-high", "name": "Gemini 4 Neon (High)"},
         ]
         return {
             "available": agy_bin is not None,
             "agyPath": agy_bin,
             "defaultModel": DEFAULT_AGY_MODEL,
+            "bubbleChatSupported": True,
             "models": self._models_cache or fallback_models,
         }
 
@@ -1342,7 +2070,7 @@ class AgyClient:
             except Exception:
                 self._worker = None
 
-    def _ask_with_retry(self, prompt: str, model: str) -> str:
+    def _ask_with_retry(self, prompt: str, model: str, timeout: float = 90.0) -> str:
         agy_bin = _find_agy_bin()
         if not agy_bin:
             raise RuntimeError("未检测到 agy 命令，请先安装并登录 antigravity-cli")
@@ -1356,7 +2084,7 @@ class AgyClient:
                 worker = self._worker
 
             try:
-                return worker.ask(prompt, timeout=90.0)
+                return worker.ask(prompt, timeout=timeout)
             except Exception:
                 with self._pool_lock:
                     if self._worker is worker:
@@ -1366,6 +2094,49 @@ class AgyClient:
                     raise
 
         raise RuntimeError("agy invocation failed")
+
+    def _ask_bubble_with_retry(
+        self,
+        task_id: str,
+        prompt: str,
+        model: str,
+        reset_session: bool = False,
+        timeout: float = 120.0,
+    ) -> tuple[str, str]:
+        agy_bin = _find_agy_bin()
+        if not agy_bin:
+            raise RuntimeError("未检测到 agy 命令，请先安装并登录 antigravity-cli")
+
+        key = str(task_id or "").strip()[:64] or "__default_bubble__"
+        for attempt in range(2):
+            with self._pool_lock:
+                existing = self._bubble_workers.get(key)
+                if reset_session or not existing or not existing.is_alive() or existing.model != model:
+                    if existing:
+                        existing.close()
+                        self._bubble_workers.pop(key, None)
+                    while len(self._bubble_workers) >= 3:
+                        oldest_key = min(
+                            self._bubble_workers,
+                            key=lambda k: self._bubble_workers[k].last_used,
+                        )
+                        oldest_worker = self._bubble_workers.pop(oldest_key)
+                        oldest_worker.close()
+                    self._bubble_workers[key] = AgyWorker(agy_bin, model, self.workdir)
+                worker = self._bubble_workers[key]
+
+            try:
+                text = worker.ask(prompt, timeout=timeout)
+                return text, worker.conversation_id
+            except Exception:
+                with self._pool_lock:
+                    if self._bubble_workers.get(key) is worker:
+                        self._bubble_workers.pop(key, None)
+                        worker.close()
+                if attempt == 1:
+                    raise
+
+        raise RuntimeError("agy bubble invocation failed")
 
     def cluster_tasks(self, tasks: Any, manual_links: Any, model: str | None = None) -> dict[str, Any]:
         if not isinstance(tasks, list) or not tasks:
@@ -1736,6 +2507,9 @@ class AgyClient:
         messages: Any = None,
         question: str = "",
         model: str | None = None,
+        task_id: str = "",
+        reset_session: bool = False,
+        rag_bundle: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         if not isinstance(task_context, dict):
             raise ValueError("taskContext must be a JSON object")
@@ -1744,6 +2518,7 @@ class AgyClient:
             raise ValueError("question must not be empty")
 
         chosen_model = (model or "").strip() or DEFAULT_AGY_MODEL
+        clean_task_id = str(task_id or task_context.get("id") or "").strip()[:64]
         compact_cl = []
         for item in (task_context.get("checklist") or [])[:40]:
             if isinstance(item, dict) and item.get("text"):
@@ -1766,6 +2541,11 @@ class AgyClient:
             "tags": [str(x)[:24] for x in (task_context.get("tags") or [])[:8]],
             "notes": str(task_context.get("notes") or "")[:1000],
             "notebook": str(task_context.get("notebook") or "")[:6000],
+            "attachments": [
+                str(a.get("name") or "")[:80]
+                for a in (task_context.get("attachments") or [])[:20]
+                if isinstance(a, dict) and a.get("name")
+            ],
             "checklist": compact_cl,
             "linkedTasks": compact_links,
         }
@@ -1778,17 +2558,44 @@ class AgyClient:
                         "content": str(m["content"])[:1500],
                     })
 
+        rag_sources = list((rag_bundle or {}).get("sources") or []) if isinstance(rag_bundle, dict) else []
+        rag_stats = dict((rag_bundle or {}).get("stats") or {}) if isinstance(rag_bundle, dict) else {}
+        rag_section = ""
+        if isinstance(rag_bundle, dict):
+            ws_sum = str(rag_bundle.get("workspaceSummary") or "").strip()
+            hits = rag_bundle.get("hits") or []
+            hit_blocks = []
+            for idx, h in enumerate(hits, 1):
+                reasons = ",".join(h.get("matchReasons") or [])
+                hit_blocks.append(
+                    f"[{idx}] ({h.get('sourceType')} | {h.get('galaxyName') or '工作区'}"
+                    + (f" | {reasons}" if reasons else "")
+                    + f") {h.get('title')}:\n{str(h.get('content') or '').strip()}"
+                )
+            rag_section = (
+                (f"\n系统全局概览：\n{ws_sum}\n" if ws_sum else "")
+                + ("\n自动 RAG 检索到的全系统相关上下文（包含其他气泡、笔记本、AI历史、附件正文与联系人；请优先围绕当前气泡回答，并在相关时自然吸收这些跨系统信息）：\n" + "\n\n".join(hit_blocks) + "\n" if hit_blocks else "")
+            )
+
         prompt = (
-            "你是 MindBubble 气泡工作舱的专属 AI 助手。不要调用任何工具，也不要读取任何文件，只结合下方任务上下文与近期对话回答用户问题。\n"
+            "你是 MindBubble 气泡工作舱的专属 AI 助手。不要调用任何工具，也不要读取任何文件，只结合下方任务上下文、全系统 RAG 上下文与近期对话回答用户问题。\n"
             "请尽量输出清晰、可直接落地的中文 Markdown，并优先输出合法 JSON："
             '{"reply":"Markdown 格式回答正文","suggestedSteps":["可选可添加到子任务清单的具体行动步1","行动步2"]}\n'
             f"任务上下文：{json.dumps(compact_ctx, ensure_ascii=False)}\n"
+            f"{rag_section}"
             f"历史对话：{json.dumps(compact_msgs, ensure_ascii=False)}\n"
             f"用户问题：{clean_question[:3000]}"
         )
 
         started = time.monotonic()
-        raw_text = self._ask_with_retry(prompt, chosen_model).strip()
+        raw_text, conv_id = self._ask_bubble_with_retry(
+            clean_task_id,
+            prompt,
+            chosen_model,
+            reset_session=bool(reset_session),
+            timeout=120.0,
+        )
+        raw_text = raw_text.strip()
         reply_text = raw_text
         suggested_steps: list[str] = []
 
@@ -1830,13 +2637,24 @@ class AgyClient:
         if not reply_text:
             raise RuntimeError("AGY 未返回有效回复内容")
 
+        elapsed_ms = int((time.monotonic() - started) * 1000)
+        print(
+            f"[bubble-chat] task={clean_task_id or '-'} model={chosen_model} conv={conv_id or '-'} rag={len(rag_sources)} elapsed={elapsed_ms}ms",
+            flush=True,
+        )
+
         return {
             "ok": True,
             "engine": "agy",
+            "cli": "antigravity-cli",
+            "agyPath": _find_agy_bin(),
             "model": chosen_model,
+            "conversationId": conv_id,
             "reply": reply_text,
             "suggestedSteps": suggested_steps,
-            "elapsedMs": int((time.monotonic() - started) * 1000),
+            "ragSources": rag_sources,
+            "ragStats": rag_stats,
+            "elapsedMs": elapsed_ms,
         }
 
     def close(self) -> None:
@@ -1844,6 +2662,9 @@ class AgyClient:
             if self._worker:
                 self._worker.close()
                 self._worker = None
+            for worker in list(self._bubble_workers.values()):
+                worker.close()
+            self._bubble_workers.clear()
 
 
 class GoogleDriveClient:
@@ -2321,8 +3142,12 @@ def make_handler(
     store: MindBubbleStore,
     agy_client: AgyClient,
     gdrive_client: GoogleDriveClient | None = None,
+    rag_engine: MindBubbleRagEngine | None = None,
 ) -> type[BaseHTTPRequestHandler]:
     gdrive = gdrive_client or GoogleDriveClient(store)
+    rag = rag_engine or MindBubbleRagEngine(store.db_path)
+    if rag_engine is None:
+        store.add_change_listener(lambda reason: rag.schedule_sync(store, reason=reason))
     mcp_service = MindBubbleMcpService(MindBubbleBackend(store=store, agy_client=agy_client))
     mcp_rpc = McpJsonRpcHandler(mcp_service)
 
@@ -2444,7 +3269,86 @@ def make_handler(
             if path == "/api/health":
                 health = store.health()
                 health["agyAvailable"] = agy_client.is_available()
+                health["bubbleChatSupported"] = True
+                health["attachmentsSupported"] = True
+                health["contactsSupported"] = True
+                health["ragSupported"] = True
+                health["rag"] = rag.get_status()
                 self._send_json(HTTPStatus.OK, health)
+                return
+
+            if path == "/api/rag/status":
+                self._send_json(HTTPStatus.OK, {"ok": True, **rag.get_status()})
+                return
+
+            if path == "/api/rag/search":
+                q = (qs.get("q") or [""])[0]
+                tid = (qs.get("taskId") or [""])[0]
+                tk_str = (qs.get("topK") or ["8"])[0]
+                top_k = max(1, min(int(tk_str) if tk_str.isdigit() else 8, 20))
+                hits = rag.retrieve(store, query=q, current_task_id=tid, top_k=top_k)
+                self._send_json(HTTPStatus.OK, {"ok": True, "query": q, "hits": hits, "status": rag.get_status()})
+                return
+
+            if path == "/api/contacts":
+                q = (qs.get("q") or [""])[0]
+                dept = (qs.get("department") or [""])[0]
+                self._send_json(HTTPStatus.OK, store.list_contacts(query=q, department=dept))
+                return
+
+            if path == "/api/contacts/export":
+                fmt = (qs.get("format") or ["csv"])[0].lower()
+                date_str = time.strftime("%Y%m%d-%H%M%S")
+                if fmt == "json":
+                    data = store.list_contacts()
+                    self._send_json(
+                        HTTPStatus.OK,
+                        {
+                            "ok": True,
+                            "exportedAt": int(time.time() * 1000),
+                            "count": data["total"],
+                            "contacts": data["contacts"],
+                        },
+                        {"Content-Disposition": f'attachment; filename="mindbubble-contacts-{date_str}.json"'},
+                    )
+                else:
+                    csv_text = store.export_contacts_csv()
+                    self._send_bytes(
+                        HTTPStatus.OK,
+                        "text/csv; charset=utf-8",
+                        csv_text.encode("utf-8"),
+                        {"Content-Disposition": f'attachment; filename="mindbubble-contacts-{date_str}.csv"'},
+                    )
+                return
+
+            if path == "/api/contacts/lark/status":
+                try:
+                    from export_lark_contacts import get_lark_auth_status
+
+                    st = get_lark_auth_status()
+                    st.pop("raw", None)
+                    self._send_json(HTTPStatus.OK, {"ok": True, **st})
+                except Exception as exc:
+                    self._send_json(HTTPStatus.OK, {"ok": False, "cliInstalled": False, "userReady": False, "botReady": False, "note": str(exc)})
+                return
+
+            if path.startswith("/api/attachments/"):
+                att_id = path[len("/api/attachments/"):].strip("/")
+                if not ATT_ID_RE.match(att_id):
+                    self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "error": "Invalid attachment ID"})
+                    return
+                res = store.get_attachment(att_id)
+                if not res:
+                    self._send_json(HTTPStatus.NOT_FOUND, {"ok": False, "error": "Attachment not found"})
+                    return
+                meta, raw_bytes = res
+                force_dl = (qs.get("download") or ["0"])[0] == "1"
+                disp = "attachment" if force_dl else "inline"
+                extra_hdrs = {
+                    "X-Content-Type-Options": "nosniff",
+                    "Content-Disposition": f"{disp}; filename*=UTF-8''{quote(meta['name'])}",
+                }
+                self._send_bytes(HTTPStatus.OK, meta["mimeType"], raw_bytes, extra_hdrs)
                 return
 
             if path == "/api/ai/models":
@@ -2617,6 +3521,16 @@ def make_handler(
                 except (ValueError, json.JSONDecodeError, UnicodeDecodeError) as exc:
                     self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "error": str(exc)})
                 return
+            if path.startswith("/api/contacts/"):
+                cid = path[len("/api/contacts/"):].strip("/")
+                try:
+                    payload = self._read_json_body()
+                    self._send_json(HTTPStatus.OK, store.upsert_contact(payload, contact_id=cid))
+                except LookupError:
+                    self._send_json(HTTPStatus.NOT_FOUND, {"ok": False, "error": "Contact not found"})
+                except (ValueError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+                    self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "error": str(exc)})
+                return
             self._send_json(HTTPStatus.NOT_FOUND, {"error": "Not found"})
 
         def do_POST(self) -> None:
@@ -2766,16 +3680,46 @@ def make_handler(
                     self._send_json(HTTPStatus.BAD_GATEWAY, {"ok": False, "error": str(exc)})
                 return
 
+            if path == "/api/rag/reindex":
+                try:
+                    status = rag.sync_all(store, force=True)
+                    self._send_json(HTTPStatus.OK, {"ok": True, **status})
+                except Exception as exc:
+                    self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "error": str(exc)})
+                return
+
             if path == "/api/ai/bubble-chat":
                 try:
                     payload = self._read_json_body()
                     if not isinstance(payload, dict):
                         raise ValueError("Payload must be a JSON object")
+                    raw_ctx = payload.get("taskContext")
+                    req_task_id = str(
+                        payload.get("taskId")
+                        or (raw_ctx.get("id") if isinstance(raw_ctx, dict) else "")
+                        or ""
+                    )
+                    question_str = str(payload.get("question") or "")
+                    use_rag = payload.get("useRag", True) is not False
+                    rag_bundle = (
+                        rag.build_bubble_rag_bundle(
+                            store=store,
+                            task_id=req_task_id,
+                            task_context=raw_ctx if isinstance(raw_ctx, dict) else {},
+                            question=question_str,
+                            top_k=10,
+                        )
+                        if use_rag
+                        else None
+                    )
                     res = agy_client.bubble_chat(
-                        task_context=payload.get("taskContext"),
+                        task_context=raw_ctx,
                         messages=payload.get("messages"),
-                        question=str(payload.get("question") or ""),
+                        question=question_str,
                         model=payload.get("model"),
+                        task_id=req_task_id,
+                        reset_session=bool(payload.get("resetSession")),
+                        rag_bundle=rag_bundle,
                     )
                     self._send_json(HTTPStatus.OK, res)
                 except ValueError as exc:
@@ -2786,12 +3730,93 @@ def make_handler(
                     self._send_json(HTTPStatus.BAD_GATEWAY, {"ok": False, "error": str(exc)})
                 return
 
+            if path == "/api/attachments":
+                try:
+                    payload = self._read_json_body()
+                    if not isinstance(payload, dict):
+                        raise ValueError("Payload must be a JSON object")
+                    b64 = str(payload.get("dataBase64") or "").strip()
+                    if b64.startswith("data:") and "," in b64:
+                        b64 = b64.split(",", 1)[1]
+                    raw_bytes = base64.b64decode(b64, validate=True)
+                    att = store.save_attachment(
+                        name=str(payload.get("name") or "attachment"),
+                        mime_type=str(payload.get("mimeType") or ""),
+                        raw_bytes=raw_bytes,
+                        task_id=str(payload.get("taskId") or ""),
+                    )
+                    self._send_json(HTTPStatus.OK, {"ok": True, "attachment": att})
+                except OverflowError as exc:
+                    self._send_json(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, {"ok": False, "error": str(exc)})
+                except (ValueError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+                    self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "error": str(exc)})
+                except Exception as exc:
+                    self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "error": str(exc)})
+                return
+
             if path == "/api/mcp/install-antigravity":
                 try:
                     origin = self._request_origin()
                     db_p = store.db_path if hasattr(store, "db_path") else _MCP_DEFAULT_DB_PATH
                     res = install_into_antigravity(api_url=origin, db_path=db_p)
                     self._send_json(HTTPStatus.OK, res)
+                except Exception as exc:
+                    self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "error": str(exc)})
+                return
+
+            if path == "/api/contacts":
+                try:
+                    payload = self._read_json_body()
+                    self._send_json(HTTPStatus.OK, store.upsert_contact(payload))
+                except (ValueError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+                    self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "error": str(exc)})
+                return
+
+            if path == "/api/contacts/import":
+                try:
+                    payload = self._read_json_body()
+                    mode = "merge"
+                    default_source = "import"
+                    items: list[dict[str, Any]] = []
+                    if isinstance(payload, list):
+                        items = [x for x in payload if isinstance(x, dict)]
+                    elif isinstance(payload, dict):
+                        mode = str(payload.get("mode") or "merge")
+                        default_source = str(payload.get("source") or "import")
+                        if isinstance(payload.get("csvText"), str):
+                            items = _parse_contacts_csv(payload["csvText"])
+                        elif isinstance(payload.get("contacts"), list):
+                            items = [x for x in payload["contacts"] if isinstance(x, dict)]
+                        else:
+                            raise ValueError("Payload must include 'contacts' list or 'csvText'")
+                    else:
+                        raise ValueError("Invalid contacts import payload")
+                    res = store.import_contacts(items, mode=mode, default_source=default_source)
+                    self._send_json(HTTPStatus.OK, res)
+                except OverflowError as exc:
+                    self._send_json(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, {"ok": False, "error": str(exc)})
+                except (ValueError, json.JSONDecodeError, UnicodeDecodeError) as exc:
+                    self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "error": str(exc)})
+                return
+
+            if path == "/api/contacts/lark/sync":
+                try:
+                    from export_lark_contacts import export_contacts_files, fetch_lark_contacts
+
+                    lark_res = fetch_lark_contacts()
+                    contacts = lark_res["contacts"]
+                    export_dir = store.db_path.parent if hasattr(store, "db_path") else (BASE_DIR / "data")
+                    files = export_contacts_files(contacts, export_dir)
+                    imp = store.import_contacts(contacts, mode="merge", default_source="lark")
+                    self._send_json(
+                        HTTPStatus.OK,
+                        {
+                            **imp,
+                            "method": lark_res.get("method"),
+                            "sourceChatsCount": len(lark_res.get("sourceChats") or []),
+                            **files,
+                        },
+                    )
                 except Exception as exc:
                     self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "error": str(exc)})
                 return
@@ -2860,9 +3885,39 @@ def make_handler(
                 self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "error": "无效的 Google Drive 文件 ID"})
                 return
 
+            if path.startswith("/api/attachments/"):
+                att_id = path[len("/api/attachments/"):].strip("/")
+                if not ATT_ID_RE.match(att_id):
+                    self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "error": "Invalid attachment ID"})
+                    return
+                if not store.delete_attachment(att_id):
+                    self._send_json(HTTPStatus.NOT_FOUND, {"ok": False, "error": "Attachment not found"})
+                    return
+                self._send_json(HTTPStatus.OK, {"ok": True, "deletedId": att_id})
+                return
+
             if path == "/mcp":
                 mcp_rpc.close_session(self.headers.get("Mcp-Session-Id"))
                 self._send_empty(HTTPStatus.NO_CONTENT, self._mcp_cors_headers())
+                return
+
+            if path == "/api/contacts":
+                src = (qs.get("source") or [""])[0]
+                try:
+                    self._send_json(HTTPStatus.OK, store.clear_contacts(source=src))
+                except ValueError as exc:
+                    self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "error": str(exc)})
+                return
+
+            if path.startswith("/api/contacts/"):
+                cid = path[len("/api/contacts/"):].strip("/")
+                if not CONTACT_ID_RE.match(cid):
+                    self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "error": "Invalid contact ID"})
+                    return
+                if not store.delete_contact(cid):
+                    self._send_json(HTTPStatus.NOT_FOUND, {"ok": False, "error": "Contact not found"})
+                    return
+                self._send_json(HTTPStatus.OK, {"ok": True, "deletedId": cid})
                 return
 
             self._send_json(HTTPStatus.NOT_FOUND, {"error": "Not found"})
@@ -2883,10 +3938,13 @@ def main() -> None:
     store = MindBubbleStore(args.db)
     agy_client = AgyClient()
     gdrive_client = GoogleDriveClient(store)
+    rag_engine = MindBubbleRagEngine(args.db)
+    store.add_change_listener(lambda reason: rag_engine.schedule_sync(store, reason=reason))
+    threading.Thread(target=rag_engine.sync_all, args=(store,), daemon=True).start()
     threading.Thread(target=agy_client.prewarm, args=(DEFAULT_AGY_MODEL,), daemon=True).start()
 
     ThreadingHTTPServer.allow_reuse_address = True
-    server = ThreadingHTTPServer((args.host, args.port), make_handler(store, agy_client, gdrive_client))
+    server = ThreadingHTTPServer((args.host, args.port), make_handler(store, agy_client, gdrive_client, rag_engine))
 
     def shutdown_handler(signum: int, _frame: Any) -> None:
         threading.Thread(target=server.shutdown, daemon=True).start()
@@ -2902,6 +3960,7 @@ def main() -> None:
         server.serve_forever()
     finally:
         server.server_close()
+        rag_engine.close()
         agy_client.close()
         store.close()
 

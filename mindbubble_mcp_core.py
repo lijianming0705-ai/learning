@@ -420,6 +420,7 @@ TOOL_SPECS: list[dict[str, Any]] = [
                 "top3_slot": {"type": "integer", "description": "显式指定 Top-3 槽位 0/1/2"},
                 "cluster_id": {"type": "string", "description": "关联的聚类 ID"},
                 "link_to_task_id": {"type": "string", "description": "若提供已有气泡 ID，将在其附近生成并自动建立手动连线"},
+                "focus_today": {"type": "boolean", "description": "是否加入今日重点关注（true 标记为今日，false 取消）"},
             },
             "required": ["title"],
             "additionalProperties": False,
@@ -443,6 +444,7 @@ TOOL_SPECS: list[dict[str, Any]] = [
                 "top3_slot": {"type": ["integer", "null"], "description": "0/1/2，传 null 可取消置顶"},
                 "notebook": {"type": "string", "description": "覆盖更新气泡 Markdown 笔记本内容"},
                 "append_notebook": {"type": "string", "description": "向气泡笔记本末尾追加一段 Markdown 记录"},
+                "focus_today": {"type": "boolean", "description": "是否加入今日重点关注（true 标记为今日，false 取消）"},
             },
             "required": ["task_id"],
             "additionalProperties": False,
@@ -586,6 +588,21 @@ TOOL_SPECS: list[dict[str, Any]] = [
             "additionalProperties": False,
         },
     },
+    {
+        "name": "rag_search",
+        "description": "全系统混合 RAG 语义+关键词+图谱检索，跨所有气泡、笔记本、AI记录、附件正文与联系人返回高相关上下文片段。",
+        "annotations": {"readOnlyHint": True},
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "检索关键词或自然语言问题（必填）"},
+                "task_id": {"type": "string", "description": "可选当前气泡 ID，用于图谱邻近扩展"},
+                "top_k": {"type": "integer", "description": "返回最大片段数（1-20，默认 8）"},
+            },
+            "required": ["query"],
+            "additionalProperties": False,
+        },
+    },
 ]
 
 RESOURCE_SPECS: list[dict[str, Any]] = [
@@ -692,6 +709,8 @@ class MindBubbleMcpService:
         cid = t.get("clusterId")
         cl = cluster_map.get(cid) if cid else None
         nb = t.get("notebook") or ""
+        nb_html = t.get("notebookHtml") or ""
+        atts = [a for a in (t.get("attachments") or []) if isinstance(a, dict)]
         cl_list = [c for c in (t.get("checklist") or []) if isinstance(c, dict)]
         ai_hist = [m for m in (t.get("aiHistory") or []) if isinstance(m, dict)]
         act_log = [a for a in (t.get("activityLog") or []) if isinstance(a, dict)]
@@ -711,9 +730,12 @@ class MindBubbleMcpService:
             "galaxyName": g.get("name"),
             "dueAt": t.get("dueAt"),
             "dueAtStr": _format_local_ts(t.get("dueAt")),
+            "focusDate": t.get("focusDate") or "",
             "createdAt": t.get("createdAt"),
             "createdAtStr": _format_local_ts(t.get("createdAt")),
             "notebookChars": len(nb) if isinstance(nb, str) else 0,
+            "hasRichNotebook": bool(isinstance(nb_html, str) and nb_html.strip()),
+            "attachmentCount": len(atts),
             "checklistTotal": len(cl_list),
             "checklistDone": sum(1 for c in cl_list if c.get("done")),
             "aiMessageCount": len(ai_hist),
@@ -948,6 +970,11 @@ class MindBubbleMcpService:
                 })
         formatted = self._format_task(found, galaxy_map, cluster_map)
         formatted["notebook"] = str(found.get("notebook") or "")
+        formatted["attachments"] = [
+            {k: v for k, v in a.items() if k != "dataUrl"}
+            for a in (found.get("attachments") or [])
+            if isinstance(a, dict)
+        ]
         formatted["checklist"] = list(found.get("checklist") or [])
         formatted["aiHistory"] = list(found.get("aiHistory") or [])
         formatted["activityLog"] = list(found.get("activityLog") or [])
@@ -970,6 +997,7 @@ class MindBubbleMcpService:
         top3_slot: int | None = None,
         cluster_id: str | None = None,
         link_to_task_id: str | None = None,
+        focus_today: bool = False,
     ) -> dict[str, Any]:
         clean_title = str(title or "").strip()
         if not clean_title:
@@ -1044,12 +1072,15 @@ class MindBubbleMcpService:
             "clusterId": resolved_cluster,
             "galaxyId": target_gid,
             "dueAt": parsed_due,
+            "focusDate": _dt.datetime.now().strftime("%Y-%m-%d") if focus_today else "",
             "x": x,
             "y": y,
             "z": z,
             "floatSeed": round(0.1 + seed * 0.85, 6),
             "createdAt": _now_ms(),
             "notebook": "",
+            "notebookHtml": "",
+            "attachments": [],
             "checklist": [],
             "aiHistory": [],
             "activityLog": [
@@ -1097,6 +1128,7 @@ class MindBubbleMcpService:
         top3_slot: int | None = -999,
         notebook: str | None = None,
         append_notebook: str | None = None,
+        focus_today: bool | None = None,
     ) -> dict[str, Any]:
         state, _, _ = self._load_bundle()
         task = next((t for t in state["tasks"] if t.get("id") == task_id), None)
@@ -1146,6 +1178,16 @@ class MindBubbleMcpService:
             task["notebook"] = (prev_nb + sep + append_notebook.strip())[:100_000]
             log = list(task.get("activityLog") or [])
             log.append({"id": _uid("act"), "type": "notebook_edit", "text": "MCP 追加笔记本记录", "createdAt": _now_ms()})
+            task["activityLog"] = log[-150:]
+        if focus_today is not None:
+            task["focusDate"] = _dt.datetime.now().strftime("%Y-%m-%d") if focus_today else ""
+            log = list(task.get("activityLog") or [])
+            log.append({
+                "id": _uid("act"),
+                "type": "focus_today",
+                "text": "MCP 加入今日重点关注" if focus_today else "MCP 移出今日重点关注",
+                "createdAt": _now_ms(),
+            })
             task["activityLog"] = log[-150:]
 
         saved = self._save_state(state, reason=f"MCP 更新「{str(task.get('title') or '')[:14]}」")
@@ -1539,6 +1581,36 @@ class MindBubbleMcpService:
             "transportSource": self.backend.last_source,
         }
 
+    def rag_search(self, query: str, task_id: str = "", top_k: int = 8) -> dict[str, Any]:
+        clean_q = str(query or "").strip()
+        if not clean_q:
+            raise ValueError("query must not be empty")
+        clamped_k = max(1, min(int(top_k or 8), 20))
+        if self.backend._store is None:
+            try:
+                qs = urllib.parse.urlencode({"q": clean_q, "taskId": str(task_id or ""), "topK": str(clamped_k)})
+                res = self.backend._http_json(f"/api/rag/search?{qs}", method="GET", timeout=15.0)
+                if isinstance(res, dict) and res.get("ok"):
+                    return {**res, "transportSource": "http"}
+            except Exception:
+                pass
+        from mindbubble_rag import MindBubbleRagEngine
+
+        store = self.backend._get_fallback_store()
+        rag = MindBubbleRagEngine(store.db_path)
+        try:
+            hits = rag.retrieve(store, query=clean_q, current_task_id=str(task_id or ""), top_k=clamped_k)
+            status = rag.get_status()
+        finally:
+            rag.close()
+        return {
+            "ok": True,
+            "query": clean_q,
+            "hits": hits,
+            "status": status,
+            "transportSource": self.backend.last_source,
+        }
+
     def call_tool(self, name: str, arguments: dict[str, Any] | None = None) -> Any:
         args = dict(arguments or {})
         dispatch = {
@@ -1560,6 +1632,7 @@ class MindBubbleMcpService:
             "list_snapshots": self.list_snapshots,
             "create_snapshot": self.create_snapshot,
             "restore_snapshot": self.restore_snapshot,
+            "rag_search": self.rag_search,
         }
         fn = dispatch.get(name)
         if not fn:
