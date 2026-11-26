@@ -171,6 +171,7 @@ class HighlightOut(BaseModel):
 
 class OcrHighlightRequest(BaseModel):
     model: str | None = None
+    engine: Literal["local", "agy"] = "local"
 
 
 class AskHighlightRequest(BaseModel):
@@ -218,6 +219,9 @@ class SettingsOut(BaseModel):
     cross_notebook_rag: bool = True
     embedding_provider: str = "hybrid-local"
     ollama_embedding_model: str = ""
+    tts_engine: str = "mlx-audio"
+    mlx_tts_voice: str = "Vivian"
+    mlx_tts_model: str = "mlx-community/Qwen3-TTS-12Hz-0.6B-CustomVoice-8bit"
 
 
 class SettingsUpdate(BaseModel):
@@ -226,6 +230,9 @@ class SettingsUpdate(BaseModel):
     cross_notebook_rag: bool | None = None
     embedding_provider: Literal["hybrid-local", "ollama"] | None = None
     ollama_embedding_model: str | None = None
+    tts_engine: Literal["mlx-audio", "edge-tts", "macos-say"] | None = None
+    mlx_tts_voice: str | None = None
+    mlx_tts_model: str | None = None
 
 
 class RagStatsOut(BaseModel):
@@ -242,6 +249,10 @@ class HealthOut(BaseModel):
     agy_path: str | None
     agy_warm_workers: int
     rag_documents: int
+    local_ocr_available: bool = False
+    local_ocr_engine: str = "none"
+    local_tts_available: bool = False
+    local_tts_engine: str = "none"
 
 
 class SelectionSpeechRequest(BaseModel):
@@ -411,8 +422,9 @@ class ReadingAiReportResponse(BaseModel):
 
 class OcrConvertSourceRequest(BaseModel):
     model: str | None = None
+    engine: Literal["local", "hybrid", "agy"] = "local"
     full_book: bool = True
     start_page: int = Field(default=1, ge=1)
     end_page: int | None = Field(default=None, ge=1)
-    concurrency: int = Field(default=1, ge=1, le=3)
+    concurrency: int = Field(default=4, ge=1, le=8)
     title: str | None = Field(default=None, max_length=280)

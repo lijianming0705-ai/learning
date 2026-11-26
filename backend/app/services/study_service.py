@@ -9,7 +9,13 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from app.config import DEFAULT_MODEL, ensure_data_dirs
+from app.config import (
+    DEFAULT_MLX_TTS_MODEL,
+    DEFAULT_MLX_TTS_VOICE,
+    DEFAULT_MODEL,
+    DEFAULT_TTS_ENGINE,
+    ensure_data_dirs,
+)
 from app.db import DEFAULT_SETTINGS, get_db, utc_now_iso
 from app.rag.store import RagHit, rag_store
 from app.rag.tokenizer import extract_hybrid_tokens
@@ -62,6 +68,9 @@ def get_settings() -> SettingsOut:
         cross_notebook_rag=data.get("cross_notebook_rag", "true").lower() == "true",
         embedding_provider=data.get("embedding_provider") or "hybrid-local",
         ollama_embedding_model=data.get("ollama_embedding_model") or "",
+        tts_engine=data.get("tts_engine") or DEFAULT_TTS_ENGINE,
+        mlx_tts_voice=data.get("mlx_tts_voice") or DEFAULT_MLX_TTS_VOICE,
+        mlx_tts_model=data.get("mlx_tts_model") or DEFAULT_MLX_TTS_MODEL,
     )
 
 
@@ -78,6 +87,12 @@ def update_settings(payload: SettingsUpdate) -> SettingsOut:
         updates["embedding_provider"] = payload.embedding_provider
     if payload.ollama_embedding_model is not None:
         updates["ollama_embedding_model"] = payload.ollama_embedding_model
+    if payload.tts_engine is not None:
+        updates["tts_engine"] = payload.tts_engine
+    if payload.mlx_tts_voice is not None and payload.mlx_tts_voice.strip():
+        updates["mlx_tts_voice"] = payload.mlx_tts_voice.strip()
+    if payload.mlx_tts_model is not None and payload.mlx_tts_model.strip():
+        updates["mlx_tts_model"] = payload.mlx_tts_model.strip()
 
     if updates:
         with get_db() as conn:

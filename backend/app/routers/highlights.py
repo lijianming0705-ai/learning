@@ -10,6 +10,7 @@ from app.rag.store import rag_store
 from app.schemas import AskHighlightRequest, HighlightCreate, HighlightOut, HighlightUpdate, OcrHighlightRequest
 from app.services import study_service
 from app.services.agy_service import agy_service, build_highlight_prompt, ocr_highlight_image
+from app.services.ocr_service import ocr_service
 
 router = APIRouter(prefix="/api", tags=["highlights"])
 
@@ -71,16 +72,26 @@ async def ocr_highlight(
 
     settings = study_service.get_settings()
     model = ((payload.model if payload else None) or settings.default_model).strip()
-    try:
-        ocr_text = await ocr_highlight_image(
-            highlight_id=highlight_id,
-            image_path=str(img_path),
-            source_title=hl.source_title,
-            page_number=hl.page_number,
-            model=model,
-        )
-    except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"OCR 识别失败: {exc}") from exc
+    engine = payload.engine if payload else "local"
+    ocr_text = ""
+
+    if engine == "local" and ocr_service.is_available():
+        try:
+            ocr_text = await ocr_service.ocr_image_text(img_path)
+        except Exception:
+            ocr_text = ""
+
+    if not ocr_text:
+        try:
+            ocr_text = await ocr_highlight_image(
+                highlight_id=highlight_id,
+                image_path=str(img_path),
+                source_title=hl.source_title,
+                page_number=hl.page_number,
+                model=model,
+            )
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=f"OCR 识别失败: {exc}") from exc
 
     if not ocr_text:
         raise HTTPException(status_code=422, detail="未识别出有效内容，请尝试放大框选区域或切换模型重试")

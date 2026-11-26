@@ -142,6 +142,9 @@ export interface AppSettings {
   cross_notebook_rag: boolean;
   embedding_provider: 'hybrid-local' | 'ollama';
   ollama_embedding_model: string;
+  tts_engine?: 'mlx-audio' | 'edge-tts' | 'macos-say';
+  mlx_tts_voice?: string;
+  mlx_tts_model?: string;
 }
 
 export interface RagStats {
@@ -158,6 +161,10 @@ export interface HealthStatus {
   agy_path: string | null;
   agy_warm_workers: number;
   rag_documents: number;
+  local_ocr_available?: boolean;
+  local_ocr_engine?: string | null;
+  local_tts_available?: boolean;
+  local_tts_engine?: string | null;
 }
 
 export interface PendingSelection {

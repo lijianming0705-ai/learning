@@ -7,30 +7,54 @@ import {
   RefreshCw,
   SkipBack,
   SkipForward,
-  Sparkles,
   Square,
   Volume2,
   X,
 } from 'lucide-react';
-import type { AgyModel, SelectionSpeechResult, SpeechSegment } from '../types';
+import type { SelectionSpeechResult, SpeechSegment } from '../types';
 
 const SPEED_OPTIONS = [0.8, 1.0, 1.25, 1.5, 2.0];
+
+const MLX_VOICE_OPTIONS = [
+  { id: 'Vivian', label: 'Vivian · 女声' },
+  { id: 'Serena', label: 'Serena · 温柔' },
+  { id: 'Ryan', label: 'Ryan · 男声' },
+  { id: 'Uncle_Fu', label: 'Uncle_Fu · 沉稳' },
+  { id: 'Aiden', label: 'Aiden · 青年' },
+  { id: 'Eric', label: 'Eric · 自然' },
+  { id: 'Dylan', label: 'Dylan · 朗读' },
+  { id: 'Ono_Anna', label: 'Ono_Anna · 日语' },
+  { id: 'Sohee', label: 'Sohee · 韩语' },
+];
+
+export interface SpeechGenerationProgress {
+  percent: number;
+  completedBatches: number;
+  totalBatches: number;
+  segmentsSoFar: number;
+  label: string;
+}
 
 interface SpeechPanelProps {
   hasSource: boolean;
   sourceTitle: string;
   segments: SpeechSegment[];
   generating: boolean;
+  generationProgress: SpeechGenerationProgress | null;
   activeSegmentIndex: number | null;
+  loadingSegmentIndex: number | null;
   isPlaying: boolean;
   speechRate: number;
   autoSyncPage: boolean;
-  models: AgyModel[];
-  selectedModel: string;
+  ttsEngine: 'mlx-audio' | 'edge-tts' | 'macos-say';
+  mlxVoice: string;
   selectionSpeech: SelectionSpeechResult | null;
   selectionSpeechLoading: boolean;
   selectionPlaying: boolean;
-  onSelectModel: (modelId: string) => void;
+  onChangeTtsSettings: (patch: {
+    tts_engine?: 'mlx-audio' | 'edge-tts' | 'macos-say';
+    mlx_tts_voice?: string;
+  }) => void;
   onGenerateScript: (forceRegenerate?: boolean) => void;
   onPlaySegment: (index: number) => void;
   onTogglePlayPause: () => void;
@@ -49,16 +73,18 @@ export function SpeechPanel({
   sourceTitle,
   segments,
   generating,
+  generationProgress,
   activeSegmentIndex,
+  loadingSegmentIndex,
   isPlaying,
   speechRate,
   autoSyncPage,
-  models,
-  selectedModel,
+  ttsEngine,
+  mlxVoice,
   selectionSpeech,
   selectionSpeechLoading,
   selectionPlaying,
-  onSelectModel,
+  onChangeTtsSettings,
   onGenerateScript,
   onPlaySegment,
   onTogglePlayPause,
@@ -82,49 +108,65 @@ export function SpeechPanel({
   }, [activeSegmentIndex]);
 
   const activeSeg = activeSegmentIndex !== null ? segments[activeSegmentIndex] || null : null;
+  const pct = Math.max(0, Math.min(100, generationProgress?.percent ?? 0));
 
   return (
     <div className="h-full flex flex-col bg-[#FAF8F4]/50">
       {/* Header Controls */}
       <div className="p-3 border-b border-[#E5E0D5] space-y-2.5 bg-white eink-surface">
-        <div className="flex items-center justify-between gap-2 text-[11px]">
+        {/* TTS Engine & Voice Controls (linked to system settings) */}
+        <div className="flex items-center gap-1.5 text-[11px]">
           <span className="inline-flex items-center gap-1 text-[#5E5B53] shrink-0">
-            <Sparkles className="w-3 h-3 text-[#B45309]" />
-            <span>文本生成模型</span>
+            <Volume2 className="w-3 h-3 text-[#B45309]" />
+            <span>语音</span>
           </span>
           <select
-            value={selectedModel}
-            onChange={(e) => onSelectModel(e.target.value)}
-            aria-label="语音文本生成 agy 模型"
+            value={ttsEngine}
+            onChange={(e) =>
+              onChangeTtsSettings({
+                tts_engine: e.target.value as 'mlx-audio' | 'edge-tts' | 'macos-say',
+              })
+            }
+            aria-label="语音合成引擎"
             className="flex-1 min-w-0 rounded-lg border border-[#E5E0D5] bg-white px-2 py-1 text-[11px] font-medium text-[#1C1B18] focus:outline-none focus:border-[#B45309] cursor-pointer"
           >
-            {models.length === 0 ? (
-              <option value={selectedModel}>{selectedModel}</option>
-            ) : (
-              models.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.id === 'gemini-4-hydrogen-medium'
-                    ? `★ ${m.name} · 默认`
-                    : m.id === 'gemini-3.8-flash-low'
-                      ? `⚡ ${m.name} · 最快`
-                      : m.name}
-                </option>
-              ))
-            )}
+            <option value="mlx-audio">MLX-Audio (本地)</option>
+            <option value="edge-tts">Edge TTS (在线)</option>
+            <option value="macos-say">macOS say (离线)</option>
           </select>
+
+          {ttsEngine === 'mlx-audio' && (
+            <select
+              value={mlxVoice}
+              onChange={(e) => onChangeTtsSettings({ mlx_tts_voice: e.target.value })}
+              aria-label="MLX-Audio 音色"
+              className="w-[116px] shrink-0 rounded-lg border border-[#E5E0D5] bg-white px-2 py-1 text-[11px] font-medium text-[#1C1B18] focus:outline-none focus:border-[#B45309] cursor-pointer"
+            >
+              {MLX_VOICE_OPTIONS.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.label}
+                </option>
+              ))}
+            </select>
+          )}
         </div>
 
-        <div className="flex items-center gap-2">
+        {/* Generate Action + Real-Time Progress */}
+        <div className="space-y-1.5">
           <button
             type="button"
             disabled={!hasSource || generating}
             onClick={() => onGenerateScript(segments.length > 0)}
-            className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-[#B45309] hover:bg-[#92400E] disabled:opacity-50 text-white text-xs font-medium shadow-xs cursor-pointer transition"
+            className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-[#B45309] hover:bg-[#92400E] disabled:opacity-70 text-white text-xs font-medium shadow-xs cursor-pointer transition"
           >
             {generating ? (
               <>
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                <span>agy 正在整理全文自然朗读...</span>
+                <span>
+                  {generationProgress
+                    ? `正在整理自然朗读 (${pct}%)...`
+                    : '正在整理全文自然朗读...'}
+                </span>
               </>
             ) : segments.length > 0 ? (
               <>
@@ -138,6 +180,21 @@ export function SpeechPanel({
               </>
             )}
           </button>
+
+          {generating && generationProgress && (
+            <div className="space-y-1 px-0.5">
+              <div className="w-full h-1.5 rounded-full bg-[#EDE8DC] overflow-hidden">
+                <div
+                  className="h-full bg-[#B45309] rounded-full transition-all duration-300"
+                  style={{ width: `${Math.max(6, pct)}%` }}
+                />
+              </div>
+              <div className="flex items-center justify-between text-[10px] text-[#5E5B53]">
+                <span className="truncate">{generationProgress.label}</span>
+                <span className="shrink-0 font-medium text-[#B45309]">{pct}%</span>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="flex items-center justify-between gap-2 text-[11px] text-[#5E5B53]">
@@ -186,7 +243,7 @@ export function SpeechPanel({
             {selectionSpeechLoading ? (
               <div className="flex items-center gap-2 py-2 text-xs text-[#5E5B53]">
                 <Loader2 className="w-4 h-4 animate-spin text-teal-600" />
-                <span>正在调用 agy 生成自然发音文本并合成语音...</span>
+                <span>正在生成自然发音文本并合成语音...</span>
               </div>
             ) : (
               selectionSpeech && (
@@ -239,7 +296,9 @@ export function SpeechPanel({
             <div className="flex items-center justify-between gap-2 text-[11px] text-[#5E5B53]">
               <span className="font-medium text-[#1C1B18] truncate">
                 {activeSeg
-                  ? `第 ${activeSeg.segment_index + 1} / ${segments.length} 段 · P.${activeSeg.page_number}`
+                  ? loadingSegmentIndex === activeSegmentIndex
+                    ? `正在合成第 ${activeSeg.segment_index + 1} 段语音...`
+                    : `第 ${activeSeg.segment_index + 1} / ${segments.length} 段 · P.${activeSeg.page_number}`
                   : `已就绪 · 共 ${segments.length} 段`}
               </span>
               <div className="flex items-center gap-1 shrink-0">
@@ -276,7 +335,12 @@ export function SpeechPanel({
                 onClick={onTogglePlayPause}
                 className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#B45309] hover:bg-[#92400E] text-white text-xs font-medium cursor-pointer shadow-xs"
               >
-                {isPlaying ? (
+                {loadingSegmentIndex !== null && loadingSegmentIndex === activeSegmentIndex ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>合成中...</span>
+                  </>
+                ) : isPlaying ? (
                   <>
                     <Pause className="w-4 h-4 fill-current" />
                     <span>暂停</span>
@@ -319,7 +383,8 @@ export function SpeechPanel({
             <AudioLines className="w-8 h-8 mx-auto text-[#C4BCAE]" />
             <p className="font-medium text-[#1C1B18]">还没有生成全文自然朗读脚本</p>
             <p className="leading-relaxed">
-              点击上方 <span className="font-semibold text-[#B45309]">「一键生成全文自然朗读」</span>，agy 会把全文整理为自然口语播客式分段文本；你也可以直接在文档中划选任意句子点击
+              点击上方 <span className="font-semibold text-[#B45309]">「一键生成全文自然朗读」</span>，系统会把全文整理为自然口语播客式分段文本，并使用默认{' '}
+              <span className="font-semibold text-[#1C1B18]">MLX-Audio</span> 本地语音合成播放；你也可以直接在文档中划选任意句子点击
               <span className="font-semibold text-[#1C1B18]">「发音」</span> 或
               <span className="font-semibold text-[#1C1B18]">「从此处朗读」</span>。
             </p>
@@ -328,6 +393,7 @@ export function SpeechPanel({
           <div className="space-y-2">
             {segments.map((seg, idx) => {
               const active = idx === activeSegmentIndex;
+              const synthesizing = idx === loadingSegmentIndex;
               return (
                 <button
                   key={seg.id}
@@ -357,7 +423,12 @@ export function SpeechPanel({
                       )}
                     </div>
                     <span className="text-[10px] text-[#B45309] shrink-0 inline-flex items-center gap-0.5">
-                      {active && isPlaying ? (
+                      {synthesizing ? (
+                        <>
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                          <span>合成中...</span>
+                        </>
+                      ) : active && isPlaying ? (
                         <>
                           <Volume2 className="w-3 h-3 animate-pulse" />
                           <span>朗读中</span>

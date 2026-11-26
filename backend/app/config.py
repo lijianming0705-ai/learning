@@ -53,4 +53,10 @@ def ensure_data_dirs() -> AppPaths:
 AGY_BIN = os.environ.get("STUDY_AGY_BIN", "agy")
 DEFAULT_MODEL = os.environ.get("STUDY_DEFAULT_MODEL", "gemini-4-hydrogen-medium")
 OLLAMA_URL = os.environ.get("STUDY_OLLAMA_URL", "http://localhost:11434")
+DEFAULT_TTS_ENGINE = os.environ.get("STUDY_TTS_ENGINE", "mlx-audio")
+DEFAULT_MLX_TTS_MODEL = os.environ.get(
+    "STUDY_MLX_TTS_MODEL",
+    "mlx-community/Qwen3-TTS-12Hz-0.6B-CustomVoice-8bit",
+)
+DEFAULT_MLX_TTS_VOICE = os.environ.get("STUDY_MLX_TTS_VOICE", "Vivian")
 MAX_UPLOAD_BYTES = 80 * 1024 * 1024  # 80 MB

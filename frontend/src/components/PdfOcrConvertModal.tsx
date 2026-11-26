@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { BookOpen, CheckCircle2, Clock, FileText, Gauge, Image, Loader2, ScanText, Sparkles, X } from 'lucide-react';
+import { BookOpen, CheckCircle2, Clock, Cpu, FileText, Gauge, Image, Loader2, ScanText, Sparkles, X, Zap } from 'lucide-react';
 import { streamPdfOcrConvert, type OcrConvertProgressEvent } from '../api/client';
 import type { AgyModel, SourceDetail } from '../types';
 import { formatDuration } from '../utils/formatDuration';
@@ -11,10 +11,13 @@ export interface OcrConvertTarget {
   is_scanned: boolean;
 }
 
+type OcrEngineMode = 'local' | 'hybrid' | 'agy';
+
 interface PdfOcrConvertModalProps {
   target: OcrConvertTarget;
   models: AgyModel[];
   selectedModel: string;
+  localOcrAvailable?: boolean;
   onSelectModel: (modelId: string) => void;
   onConverted: (newSource: SourceDetail) => void;
   onPartialRefresh?: () => Promise<void> | void;
@@ -25,6 +28,7 @@ export function PdfOcrConvertModal({
   target,
   models,
   selectedModel,
+  localOcrAvailable = true,
   onSelectModel,
   onConverted,
   onPartialRefresh,
@@ -35,7 +39,8 @@ export function PdfOcrConvertModal({
   const [fullBook, setFullBook] = useState(true);
   const [startPage, setStartPage] = useState(1);
   const [endPage, setEndPage] = useState(maxPage);
-  const [concurrency, setConcurrency] = useState<1 | 2 | 3>(maxPage >= 6 ? 2 : 1);
+  const [engine, setEngine] = useState<OcrEngineMode>(localOcrAvailable ? 'local' : 'agy');
+  const [concurrency, setConcurrency] = useState<number>(localOcrAvailable ? Math.min(4, maxPage) : maxPage >= 6 ? 2 : 1);
 
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState<{
@@ -43,6 +48,7 @@ export function PdfOcrConvertModal({
     total: number;
     message: string;
     totalFigures: number;
+    pagesPerSec?: number;
   } | null>(null);
   const [elapsedSec, setElapsedSec] = useState(0);
   const [logs, setLogs] = useState<{ page: number; figures: number; failed?: boolean; preview: string }[]>([]);
@@ -66,6 +72,17 @@ export function PdfOcrConvertModal({
     return () => window.clearInterval(timer);
   }, [running]);
 
+  const handleEngineChange = (next: OcrEngineMode) => {
+    setEngine(next);
+    if (next === 'local') {
+      setConcurrency(Math.min(4, Math.max(1, maxPage)));
+    } else if (next === 'hybrid') {
+      setConcurrency(Math.min(3, Math.max(1, maxPage)));
+    } else {
+      setConcurrency(maxPage >= 6 ? 2 : 1);
+    }
+  };
+
   const handleStart = async () => {
     if (running) return;
     const safeStart = fullBook ? 1 : Math.max(1, Math.min(maxPage, startPage));
@@ -77,11 +94,17 @@ export function PdfOcrConvertModal({
     setLogs([]);
     setElapsedSec(0);
     startedAtRef.current = Date.now();
+    const engineLabel =
+      engine === 'local'
+        ? 'Apple Vision 本地极速'
+        : engine === 'hybrid'
+          ? '智能混合（本地 + AI 精修）'
+          : 'agy AI 多模态';
     setProgress({
       current: 0,
       total: totalCount,
       totalFigures: 0,
-      message: `正在启动 agy ${concurrency > 1 ? `${concurrency} 线程并发` : ''}全本版面 OCR...`,
+      message: `正在启动 ${engineLabel}（${concurrency} 路并发）...`,
     });
 
     const controller = new AbortController();
@@ -91,6 +114,7 @@ export function PdfOcrConvertModal({
       target.id,
       {
         model: selectedModel,
+        engine,
         full_book: fullBook,
         start_page: safeStart,
         end_page: safeEnd,
@@ -111,6 +135,7 @@ export function PdfOcrConvertModal({
             current: ev.stage === 'done_page' ? ev.current : (prev?.current ?? ev.current),
             total: ev.total,
             totalFigures: ev.total_figures ?? prev?.totalFigures ?? 0,
+            pagesPerSec: ev.pages_per_sec ?? prev?.pagesPerSec,
             message: ev.message,
           }));
           if (ev.stage === 'done_page') {
@@ -158,6 +183,22 @@ export function PdfOcrConvertModal({
       ? Math.round((elapsedSec / progress.current) * (progress.total - progress.current))
       : null;
 
+  const concurrencyOptions =
+    engine === 'local'
+      ? [
+          { value: 2, label: '2x 轻载并发' },
+          { value: 4, label: '4x 本地极速（推荐）' },
+          { value: 6, label: '6x 高速全本' },
+          { value: 8, label: '8x 满血并发' },
+        ]
+      : [
+          { value: 1, label: '1x 单线程稳健' },
+          { value: 2, label: '2x 双路并发（推荐）' },
+          { value: 3, label: '3x 三路并发' },
+          { value: 4, label: '4x 四路并发' },
+          { value: 6, label: '6x 六路极速' },
+        ];
+
   return (
     <div className="fixed inset-0 z-50 bg-black/45 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
       <div className="bg-white border border-[#E5E0D5] rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[92dvh] eink-surface">
@@ -186,10 +227,10 @@ export function PdfOcrConvertModal({
           <div className="rounded-xl bg-amber-50/80 border border-amber-200 px-3 py-2.5 text-amber-950 space-y-1">
             <div className="font-semibold flex items-center gap-1.5">
               <Image className="w-3.5 h-3.5 text-[#B45309]" />
-              <span>全本无限制转换 · 断点自动保存 · 保留原版排版与配图</span>
+              <span>全本极速转换 · 断点自动保存 · 保留原版排版与配图</span>
             </div>
             <p className="text-[11px] leading-relaxed text-amber-900">
-              支持整本书不限页数直接转换：系统每 20 页自动轮换推理上下文防止退化，自动裁剪原图插图插回原位，并在转换期间持续保存进度——即使中途停止，已完成页面也会保留为可阅读的文本版。
+              支持整本书不限页数极速转换：本地 Apple Vision 引擎直调神经网络引擎并发识图，自动重建段落/标题/分栏/列表并无损裁剪原图插图回插原位。
             </p>
           </div>
 
@@ -202,6 +243,75 @@ export function PdfOcrConvertModal({
               onChange={(e) => setTitle(e.target.value)}
               className="w-full rounded-lg border border-[#E5E0D5] bg-[#FAF8F4] px-3 py-2 text-xs text-[#1C1B18] focus:outline-none focus:border-[#B45309]"
             />
+          </div>
+
+          {/* Engine Selector */}
+          <div className="space-y-1.5">
+            <label className="block font-medium text-[#5E5B53]">OCR 识别引擎</label>
+            <div className="grid grid-cols-1 gap-1.5">
+              {localOcrAvailable && (
+                <button
+                  type="button"
+                  disabled={running}
+                  onClick={() => handleEngineChange('local')}
+                  className={`flex items-start gap-2.5 px-3 py-2 rounded-xl border text-left cursor-pointer transition ${
+                    engine === 'local'
+                      ? 'border-[#B45309] bg-amber-50/90 text-[#1C1B18] ring-1 ring-[#B45309]/30'
+                      : 'border-[#E5E0D5] bg-[#FAF8F4] text-[#5E5B53] hover:text-[#1C1B18]'
+                  }`}
+                >
+                  <Zap className="w-4 h-4 text-[#B45309] shrink-0 mt-0.5" />
+                  <div className="min-w-0">
+                    <div className="font-semibold text-xs text-[#1C1B18]">
+                      Apple Vision 本地极速 <span className="text-[10px] font-medium text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded-full ml-1">推荐 · 秒级百页</span>
+                    </div>
+                    <div className="text-[11px] text-[#5E5B53] mt-0.5">
+                      调用 macOS 神经网络引擎，零网络延迟与零失败，自动排版并提取配图
+                    </div>
+                  </div>
+                </button>
+              )}
+
+              {localOcrAvailable && (
+                <button
+                  type="button"
+                  disabled={running}
+                  onClick={() => handleEngineChange('hybrid')}
+                  className={`flex items-start gap-2.5 px-3 py-2 rounded-xl border text-left cursor-pointer transition ${
+                    engine === 'hybrid'
+                      ? 'border-[#B45309] bg-amber-50/90 text-[#1C1B18] ring-1 ring-[#B45309]/30'
+                      : 'border-[#E5E0D5] bg-[#FAF8F4] text-[#5E5B53] hover:text-[#1C1B18]'
+                  }`}
+                >
+                  <Cpu className="w-4 h-4 text-[#B45309] shrink-0 mt-0.5" />
+                  <div className="min-w-0">
+                    <div className="font-semibold text-xs text-[#1C1B18]">智能混合（本地 + AI 精修）</div>
+                    <div className="text-[11px] text-[#5E5B53] mt-0.5">
+                      常规页本地秒出，检测到复杂表格/公式页自动交由 agy 精排
+                    </div>
+                  </div>
+                </button>
+              )}
+
+              <button
+                type="button"
+                disabled={running}
+                onClick={() => handleEngineChange('agy')}
+                className={`flex items-start gap-2.5 px-3 py-2 rounded-xl border text-left cursor-pointer transition ${
+                  engine === 'agy'
+                    ? 'border-[#B45309] bg-amber-50/90 text-[#1C1B18] ring-1 ring-[#B45309]/30'
+                    : 'border-[#E5E0D5] bg-[#FAF8F4] text-[#5E5B53] hover:text-[#1C1B18]'
+                }`}
+              >
+                <Sparkles className="w-4 h-4 text-[#B45309] shrink-0 mt-0.5" />
+                <div className="min-w-0">
+                  <div className="font-semibold text-xs text-[#1C1B18]">AI 多模态全页精排</div>
+                  <div className="text-[11px] text-[#5E5B53] mt-0.5">
+                    全页使用视觉大模型深度理解（适合复杂公式 LaTeX 与表格，速度较慢）
+                  </div>
+                </div>
+              </button>
+            </div>
           </div>
 
           {/* Scope Toggle: Full Book vs Page Range */}
@@ -270,28 +380,34 @@ export function PdfOcrConvertModal({
             <div className="space-y-1.5">
               <label className="inline-flex items-center gap-1 font-medium text-[#5E5B53]">
                 <Sparkles className="w-3 h-3 text-[#B45309]" />
-                <span>视觉识别 agy 模型</span>
+                <span>{engine === 'local' ? '识别引擎状态' : '视觉识别 agy 模型'}</span>
               </label>
-              <select
-                disabled={running}
-                value={selectedModel}
-                onChange={(e) => onSelectModel(e.target.value)}
-                className="w-full rounded-lg border border-[#E5E0D5] bg-[#FAF8F4] px-3 py-2 text-xs text-[#1C1B18] cursor-pointer"
-              >
-                {models.length === 0 ? (
-                  <option value={selectedModel}>{selectedModel}</option>
-                ) : (
-                  models.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.id === 'gemini-4-hydrogen-medium'
-                        ? `★ ${m.name} · 默认`
-                        : m.id === 'gemini-3.8-flash-low'
-                          ? `⚡ ${m.name} · 最快`
-                          : m.name}
-                    </option>
-                  ))
-                )}
-              </select>
+              {engine === 'local' ? (
+                <div className="w-full rounded-lg border border-emerald-200 bg-emerald-50/70 px-3 py-2 text-[11px] font-medium text-emerald-800">
+                  Apple Vision 神经网络引擎（本地离线，无需调用模型）
+                </div>
+              ) : (
+                <select
+                  disabled={running}
+                  value={selectedModel}
+                  onChange={(e) => onSelectModel(e.target.value)}
+                  className="w-full rounded-lg border border-[#E5E0D5] bg-[#FAF8F4] px-3 py-2 text-xs text-[#1C1B18] cursor-pointer"
+                >
+                  {models.length === 0 ? (
+                    <option value={selectedModel}>{selectedModel}</option>
+                  ) : (
+                    models.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.id === 'gemini-4-hydrogen-medium'
+                          ? `★ ${m.name} · 默认`
+                          : m.id === 'gemini-3.8-flash-low'
+                            ? `⚡ ${m.name} · 最快`
+                            : m.name}
+                      </option>
+                    ))
+                  )}
+                </select>
+              )}
             </div>
 
             <div className="space-y-1.5">
@@ -302,12 +418,14 @@ export function PdfOcrConvertModal({
               <select
                 disabled={running}
                 value={concurrency}
-                onChange={(e) => setConcurrency((Number(e.target.value) as 1 | 2 | 3) || 1)}
+                onChange={(e) => setConcurrency(Number(e.target.value) || 4)}
                 className="w-full rounded-lg border border-[#E5E0D5] bg-[#FAF8F4] px-3 py-2 text-xs text-[#1C1B18] cursor-pointer"
               >
-                <option value={1}>1x 单线程稳健</option>
-                <option value={2}>2x 双路并发（推荐）</option>
-                <option value={3}>3x 三路极速全本</option>
+                {concurrencyOptions.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
               </select>
             </div>
           </div>
@@ -339,6 +457,7 @@ export function PdfOcrConvertModal({
                 <span className="inline-flex items-center gap-1">
                   <Clock className="w-3 h-3" />
                   <span>已用 {formatDuration(elapsedSec)}</span>
+                  {progress.pagesPerSec ? <span>· {progress.pagesPerSec.toFixed(1)} 页/秒</span> : null}
                   {etaSeconds !== null && <span>· 预计剩余 {formatDuration(etaSeconds)}</span>}
                 </span>
                 <span>已提取配图 {progress.totalFigures} 张</span>

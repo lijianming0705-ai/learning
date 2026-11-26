@@ -158,10 +158,13 @@ def crop_pdf_region(
     page_number: int,
     rects: list[dict[str, float]],
     output_path: Path,
+    *,
+    fitz_doc: fitz.Document | None = None,
 ) -> Path:
     if not rects:
         raise ValueError("No bounding rects supplied for PDF crop")
-    doc = fitz.open(str(pdf_path))
+    owns_doc = fitz_doc is None
+    doc = fitz_doc if fitz_doc is not None else fitz.open(str(pdf_path))
     try:
         page_idx = max(0, min(len(doc) - 1, page_number - 1))
         page = doc[page_idx]
@@ -190,7 +193,8 @@ def crop_pdf_region(
         pix.save(str(output_path))
         return output_path
     finally:
-        doc.close()
+        if owns_doc:
+            doc.close()
 
 
 def parse_docx(file_path: Path, fallback_title: str) -> ParsedSource:
@@ -329,6 +333,35 @@ def render_pdf_page_to_png(
         doc.close()
 
 
+def render_pdf_page_for_ocr(
+    pdf_path: Path,
+    page_number: int,
+    output_path: Path,
+    max_dim: float = 1400.0,
+    quality: int = 85,
+    *,
+    fitz_doc: fitz.Document | None = None,
+) -> Path:
+    owns_doc = fitz_doc is None
+    doc = fitz_doc if fitz_doc is not None else fitz.open(str(pdf_path))
+    try:
+        page_idx = max(0, min(len(doc) - 1, page_number - 1))
+        page = doc[page_idx]
+        pr = page.rect
+        largest = max(pr.width, pr.height, 1.0)
+        zoom = max(1.0, min(2.0, max_dim / largest))
+        pix = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom), alpha=False)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        if output_path.suffix.lower() in (".jpg", ".jpeg"):
+            pix.save(str(output_path), jpg_quality=quality)
+        else:
+            pix.save(str(output_path))
+        return output_path
+    finally:
+        if owns_doc:
+            doc.close()
+
+
 def _safe_align_class(align: Any) -> str:
     val = str(align or "left").strip().lower()
     if val in ("center", "right", "justify"):
@@ -350,6 +383,7 @@ def render_ocr_blocks_to_html(
     assets_dir: Path,
     fig_counter: list[int],
     plain_parts: list[str],
+    fitz_doc: fitz.Document | None = None,
 ) -> str:
     html_parts: list[str] = []
     for block in blocks:
@@ -454,6 +488,7 @@ def render_ocr_blocks_to_html(
                     assets_dir=assets_dir,
                     fig_counter=fig_counter,
                     plain_parts=plain_parts,
+                    fitz_doc=fitz_doc,
                 )
                 if inner:
                     col_htmls.append(f'<div class="ocr-column">{inner}</div>')
@@ -487,6 +522,7 @@ def render_ocr_blocks_to_html(
                     page_number,
                     [{"x": bx, "y": by, "width": bw, "height": bh}],
                     out_img,
+                    fitz_doc=fitz_doc,
                 )
             except Exception:
                 continue
@@ -519,6 +555,7 @@ def build_ocr_layout_page_html(
     page_number: int,
     new_source_id: str,
     assets_dir: Path,
+    fitz_doc: fitz.Document | None = None,
 ) -> tuple[str, str, int]:
     blocks = layout_data.get("blocks")
     if not isinstance(blocks, list):
@@ -533,6 +570,7 @@ def build_ocr_layout_page_html(
         assets_dir=assets_dir,
         fig_counter=fig_counter,
         plain_parts=plain_parts,
+        fitz_doc=fitz_doc,
     )
     try:
         cols_hint = int(layout_data.get("layout_columns") or 1)

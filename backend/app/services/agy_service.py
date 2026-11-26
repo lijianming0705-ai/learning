@@ -6,7 +6,7 @@ import re
 import shutil
 import time
 from collections import OrderedDict
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -198,7 +198,7 @@ class AgyWorker:
 class AgyService:
     """Manages antigravity-cli (`agy`) model discovery and pooled stream-json workers."""
 
-    def __init__(self, max_workers: int = 4, idle_ttl_seconds: float = 600.0) -> None:
+    def __init__(self, max_workers: int = 8, idle_ttl_seconds: float = 600.0) -> None:
         self.max_workers = max_workers
         self.idle_ttl_seconds = idle_ttl_seconds
         self._workers: OrderedDict[tuple[str, str], AgyWorker] = OrderedDict()
@@ -746,6 +746,7 @@ async def generate_full_speech_script_with_agy(
     source_title: str,
     pages: list[tuple[int, str]],
     model: str,
+    on_progress: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
 ) -> list[dict[str, Any]]:
     batches = _batch_pages_for_speech(pages)
     if not batches:
@@ -754,6 +755,19 @@ async def generate_full_speech_script_with_agy(
     all_segments: list[dict[str, Any]] = []
     total_batches = len(batches)
     for idx, batch_pages in enumerate(batches):
+        if on_progress is not None:
+            await on_progress(
+                {
+                    "stage": "batch_start",
+                    "batch_index": idx + 1,
+                    "total_batches": total_batches,
+                    "completed_batches": idx,
+                    "page_start": batch_pages[0][0],
+                    "page_end": batch_pages[-1][0],
+                    "segments_so_far": len(all_segments),
+                    "percent": int(round((idx / total_batches) * 100)),
+                }
+            )
         prompt = build_full_speech_batch_prompt(
             source_title=source_title,
             batch_pages=batch_pages,
@@ -808,6 +822,19 @@ async def generate_full_speech_script_with_agy(
         if not parsed_segments:
             parsed_segments = _fallback_segments_for_batch(batch_pages)
         all_segments.extend(parsed_segments)
+        if on_progress is not None:
+            await on_progress(
+                {
+                    "stage": "batch_done",
+                    "batch_index": idx + 1,
+                    "total_batches": total_batches,
+                    "completed_batches": idx + 1,
+                    "page_start": batch_pages[0][0],
+                    "page_end": batch_pages[-1][0],
+                    "segments_so_far": len(all_segments),
+                    "percent": int(round(((idx + 1) / total_batches) * 100)),
+                }
+            )
 
     return all_segments
 

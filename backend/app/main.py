@@ -14,7 +14,9 @@ from app.db import init_study_db
 from app.rag.store import rag_store
 from app.routers import analytics, chat, highlights, notebooks, rag, sources, speech, system
 from app.services.agy_service import agy_service
+from app.services.ocr_service import ocr_service
 from app.services.study_service import get_settings
+from app.services.tts_service import tts_service
 
 
 @asynccontextmanager
@@ -26,15 +28,24 @@ async def lifespan(_app: FastAPI):
     rag_store.configure_embedder(settings.embedding_provider, settings.ollama_embedding_model)
 
     prewarm_task: asyncio.Task[None] | None = None
+    ocr_prewarm_task: asyncio.Task[None] | None = None
     if os.environ.get("STUDY_DISABLE_PREWARM") != "1":
         prewarm_task = asyncio.create_task(agy_service.prewarm_standby(settings.default_model))
+        ocr_prewarm_task = asyncio.create_task(ocr_service.prewarm())
 
     try:
         yield
     finally:
         if prewarm_task and not prewarm_task.done():
             prewarm_task.cancel()
-        await agy_service.shutdown()
+        if ocr_prewarm_task and not ocr_prewarm_task.done():
+            ocr_prewarm_task.cancel()
+        await asyncio.gather(
+            agy_service.shutdown(),
+            ocr_service.shutdown(),
+            tts_service.shutdown(),
+            return_exceptions=True,
+        )
 
 
 app = FastAPI(

@@ -136,11 +136,11 @@ export const api = {
     }),
   deleteHighlight: (highlightId: string) =>
     requestJson<{ deleted: boolean }>(`/api/highlights/${highlightId}`, { method: 'DELETE' }),
-  ocrHighlight: (highlightId: string, model?: string) =>
+  ocrHighlight: (highlightId: string, model?: string, engine: 'local' | 'agy' = 'local') =>
     requestJson<Highlight>(`/api/highlights/${highlightId}/ocr`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: model || null }),
+      body: JSON.stringify({ model: model || null, engine }),
     }),
 
   listConversations: (notebookId: string) =>
@@ -343,6 +343,8 @@ export interface OcrConvertProgressEvent {
   page_number: number;
   stage: 'rendering' | 'ocr' | 'done_page';
   message: string;
+  engine?: string;
+  pages_per_sec?: number;
   figures_count?: number;
   total_figures?: number;
   failed?: boolean;
@@ -359,6 +361,7 @@ export interface OcrConvertCallbacks {
     end_page: number;
     total_pages: number;
     concurrency?: number;
+    engine?: string;
     model: string;
   }) => void;
   onProgress?: (payload: OcrConvertProgressEvent) => void;
@@ -370,6 +373,7 @@ export async function streamPdfOcrConvert(
   sourceId: string,
   payload: {
     model?: string;
+    engine?: 'local' | 'hybrid' | 'agy';
     full_book?: boolean;
     start_page?: number;
     end_page?: number;
@@ -461,5 +465,112 @@ export async function streamPdfOcrConvert(
   } catch (err) {
     if (signal?.aborted) return;
     cb.onError?.(err instanceof Error ? err.message : 'OCR 转换中断');
+  }
+}
+
+export interface SpeechScriptProgressEvent {
+  stage: 'batch_start' | 'batch_done' | 'cached' | string;
+  batch_index: number;
+  total_batches: number;
+  completed_batches: number;
+  page_start: number;
+  page_end: number;
+  segments_so_far: number;
+  percent: number;
+}
+
+export interface SpeechScriptStreamCallbacks {
+  onStart?: (payload: { source_id: string; total_pages: number }) => void;
+  onProgress?: (payload: SpeechScriptProgressEvent) => void;
+  onDone?: (payload: SpeechScriptResponse) => void;
+  onError?: (message: string) => void;
+}
+
+export async function streamGenerateSpeechScript(
+  sourceId: string,
+  payload: { model?: string; force_regenerate?: boolean },
+  cb: SpeechScriptStreamCallbacks,
+  signal?: AbortSignal,
+): Promise<void> {
+  const resp = await fetch(`/api/sources/${sourceId}/speech-script/stream`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: payload.model || null,
+      force_regenerate: Boolean(payload.force_regenerate),
+    }),
+    signal,
+  });
+
+  if (!resp.ok) {
+    let errText = `生成全文自然朗读失败 (${resp.status})`;
+    try {
+      const j = await resp.json();
+      if (j?.detail) errText = String(j.detail);
+    } catch {
+      // ignore
+    }
+    cb.onError?.(errText);
+    return;
+  }
+
+  const reader = resp.body?.getReader();
+  if (!reader) {
+    cb.onError?.('浏览器不支持流式读取响应');
+    return;
+  }
+
+  const decoder = new TextDecoder('utf-8');
+  let buffer = '';
+
+  const processBlock = (block: string) => {
+    const trimmed = block.trim();
+    if (!trimmed) return;
+    let eventName = 'message';
+    const dataLines: string[] = [];
+    for (const line of trimmed.split('\n')) {
+      if (line.startsWith('event:')) {
+        eventName = line.slice(6).trim();
+      } else if (line.startsWith('data:')) {
+        dataLines.push(line.slice(5).trim());
+      }
+    }
+    if (dataLines.length === 0) return;
+    let parsed: Record<string, unknown> = {};
+    try {
+      parsed = JSON.parse(dataLines.join('\n')) as Record<string, unknown>;
+    } catch {
+      return;
+    }
+    if (eventName === 'start') {
+      cb.onStart?.(parsed as unknown as { source_id: string; total_pages: number });
+    } else if (eventName === 'progress') {
+      cb.onProgress?.(parsed as unknown as SpeechScriptProgressEvent);
+    } else if (eventName === 'done') {
+      cb.onDone?.(parsed as unknown as SpeechScriptResponse);
+    } else if (eventName === 'error') {
+      cb.onError?.(String(parsed.message || '生成全文自然朗读失败'));
+    }
+  };
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let sepIdx = buffer.indexOf('\n\n');
+      while (sepIdx !== -1) {
+        const block = buffer.slice(0, sepIdx);
+        buffer = buffer.slice(sepIdx + 2);
+        processBlock(block);
+        sepIdx = buffer.indexOf('\n\n');
+      }
+    }
+    if (buffer.trim()) {
+      processBlock(buffer);
+    }
+  } catch (err) {
+    if (signal?.aborted) return;
+    cb.onError?.(err instanceof Error ? err.message : '生成全文自然朗读中断');
   }
 }

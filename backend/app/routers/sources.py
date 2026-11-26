@@ -6,11 +6,14 @@ import json
 import mimetypes
 import re
 import shutil
+import threading
+import time
 from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Literal
 from urllib.parse import quote
 
+import fitz
 from fastapi import APIRouter, File, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, Response, StreamingResponse
 
@@ -26,6 +29,13 @@ from app.schemas import (
 )
 from app.services import study_service
 from app.services.agy_service import agy_service, classify_sources_with_agy, ocr_pdf_page_layout_with_agy
+from app.services.ocr_service import (
+    OcrLine,
+    detect_figures_on_page,
+    ocr_service,
+    page_needs_ai_refinement,
+    reconstruct_layout_from_ocr_lines,
+)
 from app.services.source_parser import (
     ParsedSource,
     SourceChunk,
@@ -38,7 +48,7 @@ from app.services.source_parser import (
     parse_docx,
     parse_pdf,
     parse_text_file,
-    render_pdf_page_to_png,
+    render_pdf_page_for_ocr,
 )
 
 router = APIRouter(prefix="/api", tags=["sources"])
@@ -234,7 +244,11 @@ async def ocr_convert_pdf_source(
     model = (req.model or settings.default_model).strip()
     output_title = (req.title or f"{source.title}（OCR 文本版）").strip()[:280]
     page_numbers = list(range(start_page, end_page + 1))
-    concurrency = max(1, min(3, min(req.concurrency, len(page_numbers))))
+
+    requested_engine = req.engine
+    effective_engine = requested_engine if (requested_engine == "agy" or ocr_service.is_available()) else "agy"
+    max_conc = 8 if effective_engine == "local" else 6
+    concurrency = max(1, min(max_conc, min(req.concurrency, len(page_numbers))))
 
     paths = ensure_data_dirs()
     new_source_id = study_service.new_id()
@@ -247,10 +261,13 @@ async def ocr_convert_pdf_source(
     async def event_stream() -> AsyncIterator[str]:
         results_by_page: dict[int, tuple[str, str, int, bool]] = {}
         db_lock = asyncio.Lock()
+        fitz_lock = threading.Lock()
         saved_created = False
         used_keys: set[str] = set()
         worker_tasks: list[asyncio.Task[None]] = []
         event_queue: asyncio.Queue[tuple[str, dict] | None] = asyncio.Queue()
+        started_at = time.monotonic()
+        shared_doc = await asyncio.to_thread(fitz.open, str(pdf_path))
 
         def assemble_ordered(with_chunks: bool) -> tuple[str, str, list[tuple[int, str]], list[SourceChunk]]:
             ordered_pages = sorted(results_by_page.keys())
@@ -265,52 +282,158 @@ async def ocr_convert_pdf_source(
                         chunks_list.extend(chunk_text(txt, page_number=p))
             return full_html, full_plain, pages_list, chunks_list
 
-        async def persist_checkpoint(with_chunks: bool) -> SourceDetail | None:
+        def persist_checkpoint_sync(with_chunks: bool) -> SourceDetail | None:
             nonlocal saved_created
             if not results_by_page:
                 return None
-            async with db_lock:
-                full_html, full_plain, pages_list, chunks_list = assemble_ordered(with_chunks=with_chunks)
-                if not saved_created:
-                    parsed = ParsedSource(
-                        type="text",
-                        title=output_title,
-                        html_content=full_html,
-                        plain_text=full_plain,
-                        page_count=len(pages_list),
-                        word_count=count_words(full_plain),
-                        pages=pages_list,
-                        chunks=chunks_list if with_chunks else [],
-                        is_scanned=False,
-                    )
-                    detail = study_service.save_parsed_source(
-                        notebook_id=source.notebook_id,
-                        source_id=new_source_id,
-                        parsed=parsed,
-                        original_filename=f"{output_title}.html",
-                    )
-                    if source.category:
-                        updated = study_service.update_source(
-                            new_source_id,
-                            SourceUpdate(category=source.category),
-                        )
-                        if updated:
-                            detail = updated
-                    saved_created = True
-                    return detail
-                return study_service.update_source_content(
-                    new_source_id,
+            full_html, full_plain, pages_list, chunks_list = assemble_ordered(with_chunks=with_chunks)
+            if not saved_created:
+                parsed = ParsedSource(
+                    type="text",
+                    title=output_title,
                     html_content=full_html,
                     plain_text=full_plain,
+                    page_count=len(pages_list),
+                    word_count=count_words(full_plain),
                     pages=pages_list,
-                    chunks=chunks_list if with_chunks else None,
+                    chunks=chunks_list if with_chunks else [],
+                    is_scanned=False,
+                )
+                detail = study_service.save_parsed_source(
+                    notebook_id=source.notebook_id,
+                    source_id=new_source_id,
+                    parsed=parsed,
+                    original_filename=f"{output_title}.html",
+                )
+                if source.category:
+                    updated = study_service.update_source(
+                        new_source_id,
+                        SourceUpdate(category=source.category),
+                    )
+                    if updated:
+                        detail = updated
+                saved_created = True
+                return detail
+            return study_service.update_source_content(
+                new_source_id,
+                html_content=full_html,
+                plain_text=full_plain,
+                pages=pages_list,
+                chunks=chunks_list if with_chunks else None,
+            )
+
+        async def persist_checkpoint(with_chunks: bool) -> SourceDetail | None:
+            if not results_by_page:
+                return None
+            async with db_lock:
+                return await asyncio.to_thread(persist_checkpoint_sync, with_chunks)
+
+        def build_local_page_sync(page_num: int, lines: list[OcrLine]) -> tuple[str, str, int]:
+            with fitz_lock:
+                figures = detect_figures_on_page(shared_doc, page_num, lines)
+                layout_data = reconstruct_layout_from_ocr_lines(lines, figures=figures)
+                return build_ocr_layout_page_html(
+                    layout_data,
+                    pdf_path=pdf_path,
+                    page_number=page_num,
+                    new_source_id=new_source_id,
+                    assets_dir=assets_dir,
+                    fitz_doc=shared_doc,
                 )
 
-        async def process_single_page(
-            page_num: int,
-            thread_key: str,
-        ) -> tuple[str, str, int, bool]:
-            page_png = temp_dir / f"page_{page_num}.png"
+        def build_agy_page_sync(page_num: int, layout_data: dict) -> tuple[str, str, int]:
+            with fitz_lock:
+                return build_ocr_layout_page_html(
+                    layout_data,
+                    pdf_path=pdf_path,
+                    page_number=page_num,
+                    new_source_id=new_source_id,
+                    assets_dir=assets_dir,
+                    fitz_doc=shared_doc,
+                )
+
+        def render_page_jpg_sync(page_num: int, out_path: Path) -> Path:
+            with fitz_lock:
+                return render_pdf_page_for_ocr(
+                    pdf_path,
+                    page_num,
+                    out_path,
+                    max_dim=1400.0,
+                    quality=85,
+                    fitz_doc=shared_doc,
+                )
+
+        def make_failed_page(page_num: int, err_msg: str) -> tuple[str, str, int, bool]:
+            err_txt = html.escape(err_msg or "未知错误")
+            placeholder_html = (
+                f'<section class="ocr-page" data-page="{page_num}">'
+                f'<div class="ocr-page-badge">第 {page_num} 页</div>'
+                f'<p class="ocr-align-left"><em>第 {page_num} 页 OCR 识别失败（{err_txt}），可稍后对该页重试。</em></p>'
+                f"</section>"
+            )
+            return placeholder_html, "", 0, True
+
+        async def emit_page_done(page_num: int, page_html: str, page_plain: str, fig_count: int, failed: bool) -> None:
+            results_by_page[page_num] = (page_html, page_plain, fig_count, failed)
+            done_cnt = len(results_by_page)
+            checkpoint_interval = 1 if concurrency == 1 else max(6, concurrency * 2)
+            if done_cnt == 1 or done_cnt % checkpoint_interval == 0:
+                await persist_checkpoint(with_chunks=False)
+
+            elapsed = max(0.05, time.monotonic() - started_at)
+            pages_per_sec = round(done_cnt / elapsed, 2)
+            preview = " ".join(page_plain.split())[:100] if page_plain else ("本页识别失败（已跳过）" if failed else "")
+            total_figs_so_far = sum(v[2] for v in results_by_page.values())
+            await event_queue.put(
+                (
+                    "progress",
+                    {
+                        "current": done_cnt,
+                        "total": len(page_numbers),
+                        "page_number": page_num,
+                        "stage": "done_page",
+                        "engine": effective_engine,
+                        "pages_per_sec": pages_per_sec,
+                        "figures_count": fig_count,
+                        "total_figures": total_figs_so_far,
+                        "failed": failed,
+                        "preview": preview,
+                        "message": (
+                            f"第 {page_num} 页识别失败，已继续下一页"
+                            if failed
+                            else f"第 {page_num} 页完成（提取配图 {fig_count} 张 · {pages_per_sec:.1f} 页/秒）"
+                        ),
+                    },
+                )
+            )
+
+        async def run_agy_with_retry(page_num: int, thread_key: str, image_path: Path) -> tuple[dict | None, Exception | None]:
+            last_err: Exception | None = None
+            backoffs = (1.0, 2.5)
+            for attempt in range(3):
+                attempt_key = thread_key if attempt == 0 else f"{thread_key}:retry:{page_num}:a{attempt}"
+                used_keys.add(attempt_key)
+                try:
+                    layout_data = await ocr_pdf_page_layout_with_agy(
+                        job_id=job_id,
+                        image_path=str(image_path),
+                        source_title=source.title,
+                        page_number=page_num,
+                        total_pages=total_pdf_pages,
+                        model=model,
+                        thread_key=attempt_key,
+                    )
+                    return layout_data, None
+                except Exception as exc:
+                    last_err = exc
+                    await agy_service.release_worker(attempt_key, model)
+                    used_keys.discard(attempt_key)
+                    if attempt < 2:
+                        await asyncio.sleep(backoffs[attempt])
+            return None, last_err
+
+        async def process_agy_page(page_num: int, thread_key: str) -> tuple[str, str, int, bool]:
+            page_jpg = temp_dir / f"page_{page_num}.jpg"
             try:
                 await event_queue.put(
                     (
@@ -320,12 +443,12 @@ async def ocr_convert_pdf_source(
                             "total": len(page_numbers),
                             "page_number": page_num,
                             "stage": "rendering",
-                            "message": f"正在渲染第 {page_num} 页高清图像...",
+                            "engine": effective_engine,
+                            "message": f"正在渲染第 {page_num} 页图像...",
                         },
                     )
                 )
-                render_pdf_page_to_png(pdf_path, page_num, page_png)
-
+                await asyncio.to_thread(render_page_jpg_sync, page_num, page_jpg)
                 await event_queue.put(
                     (
                         "progress",
@@ -334,55 +457,135 @@ async def ocr_convert_pdf_source(
                             "total": len(page_numbers),
                             "page_number": page_num,
                             "stage": "ocr",
+                            "engine": effective_engine,
                             "message": f"agy 正在识别第 {page_num} 页版面与配图...",
                         },
                     )
                 )
-
-                last_err: Exception | None = None
-                layout_data: dict | None = None
-                for attempt in range(2):
-                    attempt_key = thread_key if attempt == 0 else f"{thread_key}:retry:{page_num}"
-                    used_keys.add(attempt_key)
-                    try:
-                        layout_data = await ocr_pdf_page_layout_with_agy(
-                            job_id=job_id,
-                            image_path=str(page_png),
-                            source_title=source.title,
-                            page_number=page_num,
-                            total_pages=total_pdf_pages,
-                            model=model,
-                            thread_key=attempt_key,
-                        )
-                        last_err = None
-                        break
-                    except Exception as exc:
-                        last_err = exc
-                        await agy_service.release_worker(attempt_key, model)
-                        used_keys.discard(attempt_key)
-
+                layout_data, last_err = await run_agy_with_retry(page_num, thread_key, page_jpg)
                 if layout_data is None:
-                    err_txt = html.escape(str(last_err or "未知错误"))
-                    placeholder_html = (
-                        f'<section class="ocr-page" data-page="{page_num}">'
-                        f'<div class="ocr-page-badge">第 {page_num} 页</div>'
-                        f'<p class="ocr-align-left"><em>第 {page_num} 页 OCR 识别失败（{err_txt}），可稍后对该页重试。</em></p>'
-                        f"</section>"
-                    )
-                    return placeholder_html, "", 0, True
-
-                page_html, page_plain, fig_count = build_ocr_layout_page_html(
-                    layout_data,
-                    pdf_path=pdf_path,
-                    page_number=page_num,
-                    new_source_id=new_source_id,
-                    assets_dir=assets_dir,
-                )
+                    return make_failed_page(page_num, str(last_err or "未知错误"))
+                page_html, page_plain, fig_count = await asyncio.to_thread(build_agy_page_sync, page_num, layout_data)
                 return page_html, page_plain, fig_count, False
             finally:
-                page_png.unlink(missing_ok=True)
+                page_jpg.unlink(missing_ok=True)
 
-        async def run_all_workers() -> None:
+        async def run_local_engine() -> None:
+            await event_queue.put(
+                (
+                    "progress",
+                    {
+                        "current": 0,
+                        "total": len(page_numbers),
+                        "page_number": page_numbers[0],
+                        "stage": "ocr",
+                        "engine": effective_engine,
+                        "message": f"Apple Vision 本地神经网络引擎启动中（{concurrency} 路并发）...",
+                    },
+                )
+            )
+            try:
+                async for page_num, lines, err_msg in ocr_service.stream_pdf_pages_ocr(
+                    pdf_path,
+                    page_numbers,
+                    concurrency=concurrency,
+                    max_dim=1500,
+                    accurate=True,
+                ):
+                    if err_msg is not None:
+                        p_html, p_plain, p_figs, p_failed = make_failed_page(page_num, err_msg)
+                    else:
+                        p_html, p_plain, p_figs = await asyncio.to_thread(build_local_page_sync, page_num, lines)
+                        p_failed = False
+                    await emit_page_done(page_num, p_html, p_plain, p_figs, p_failed)
+            finally:
+                await event_queue.put(None)
+
+        async def run_hybrid_engine() -> None:
+            ai_queue: asyncio.Queue[tuple[int, tuple[str, str, int] | None] | None] = asyncio.Queue()
+            ai_workers_count = max(1, min(3, concurrency))
+
+            async def ai_worker(slot: int) -> None:
+                handled = 0
+                current_batch = 0
+                current_key = f"ocr_layout:{job_id}:hyb{slot}:b{current_batch}"
+                used_keys.add(current_key)
+                while True:
+                    item = await ai_queue.get()
+                    if item is None:
+                        ai_queue.task_done()
+                        break
+                    page_num, local_fallback = item
+                    try:
+                        if handled > 0 and handled % 15 == 0:
+                            old_key = current_key
+                            current_batch += 1
+                            current_key = f"ocr_layout:{job_id}:hyb{slot}:b{current_batch}"
+                            used_keys.add(current_key)
+                            await agy_service.release_worker(old_key, model)
+                            used_keys.discard(old_key)
+
+                        p_html, p_plain, p_figs, p_failed = await process_agy_page(page_num, current_key)
+                        handled += 1
+                        if p_failed and local_fallback is not None:
+                            p_html, p_plain, p_figs = local_fallback
+                            p_failed = False
+                        await emit_page_done(page_num, p_html, p_plain, p_figs, p_failed)
+                    finally:
+                        ai_queue.task_done()
+
+            ai_tasks = [asyncio.create_task(ai_worker(s)) for s in range(ai_workers_count)]
+            worker_tasks.extend(ai_tasks)
+            try:
+                await event_queue.put(
+                    (
+                        "progress",
+                        {
+                            "current": 0,
+                            "total": len(page_numbers),
+                            "page_number": page_numbers[0],
+                            "stage": "ocr",
+                            "engine": effective_engine,
+                            "message": "智能混合模式已启动：本地极速扫描 + 复杂页 AI 精排...",
+                        },
+                    )
+                )
+                async for page_num, lines, err_msg in ocr_service.stream_pdf_pages_ocr(
+                    pdf_path,
+                    page_numbers,
+                    concurrency=max(2, concurrency),
+                    max_dim=1500,
+                    accurate=True,
+                ):
+                    if err_msg is not None:
+                        await ai_queue.put((page_num, None))
+                        continue
+                    local_res = await asyncio.to_thread(build_local_page_sync, page_num, lines)
+                    if page_needs_ai_refinement(lines):
+                        await event_queue.put(
+                            (
+                                "progress",
+                                {
+                                    "current": len(results_by_page),
+                                    "total": len(page_numbers),
+                                    "page_number": page_num,
+                                    "stage": "ocr",
+                                    "engine": effective_engine,
+                                    "message": f"第 {page_num} 页含复杂版面/公式，转交 AI 精排...",
+                                },
+                            )
+                        )
+                        await ai_queue.put((page_num, local_res))
+                    else:
+                        await emit_page_done(page_num, local_res[0], local_res[1], local_res[2], False)
+
+                for _ in range(ai_workers_count):
+                    await ai_queue.put(None)
+                await asyncio.gather(*ai_tasks)
+            finally:
+                await event_queue.put(None)
+
+        async def run_agy_engine() -> None:
             page_queue: asyncio.Queue[int] = asyncio.Queue()
             for p in page_numbers:
                 await page_queue.put(p)
@@ -398,8 +601,7 @@ async def ocr_convert_pdf_source(
                     except asyncio.QueueEmpty:
                         break
                     try:
-                        # Rotate worker every 20 pages to keep context & memory compact
-                        if handled > 0 and handled % 20 == 0:
+                        if handled > 0 and handled % 15 == 0:
                             old_key = current_key
                             current_batch += 1
                             current_key = f"ocr_layout:{job_id}:s{slot}:b{current_batch}"
@@ -407,37 +609,9 @@ async def ocr_convert_pdf_source(
                             await agy_service.release_worker(old_key, model)
                             used_keys.discard(old_key)
 
-                        page_html, page_plain, fig_count, failed = await process_single_page(page_num, current_key)
-                        results_by_page[page_num] = (page_html, page_plain, fig_count, failed)
+                        page_html, page_plain, fig_count, failed = await process_agy_page(page_num, current_key)
                         handled += 1
-
-                        # Checkpoint on first page and every 3 pages (or single-thread every page)
-                        done_cnt = len(results_by_page)
-                        if done_cnt == 1 or concurrency == 1 or done_cnt % 3 == 0:
-                            await persist_checkpoint(with_chunks=False)
-
-                        preview = " ".join(page_plain.split())[:100] if page_plain else ("本页识别失败（已跳过）" if failed else "")
-                        total_figs_so_far = sum(v[2] for v in results_by_page.values())
-                        await event_queue.put(
-                            (
-                                "progress",
-                                {
-                                    "current": done_cnt,
-                                    "total": len(page_numbers),
-                                    "page_number": page_num,
-                                    "stage": "done_page",
-                                    "figures_count": fig_count,
-                                    "total_figures": total_figs_so_far,
-                                    "failed": failed,
-                                    "preview": preview,
-                                    "message": (
-                                        f"第 {page_num} 页识别失败，已继续下一页"
-                                        if failed
-                                        else f"第 {page_num} 页完成（提取配图 {fig_count} 张）"
-                                    ),
-                                },
-                            )
-                        )
+                        await emit_page_done(page_num, page_html, page_plain, fig_count, failed)
                     finally:
                         page_queue.task_done()
 
@@ -462,11 +636,18 @@ async def ocr_convert_pdf_source(
                     "end_page": end_page,
                     "total_pages": len(page_numbers),
                     "concurrency": concurrency,
+                    "engine": effective_engine,
                     "model": model,
                 },
             )
 
-            runner_task = asyncio.create_task(run_all_workers())
+            if effective_engine == "local":
+                runner_task = asyncio.create_task(run_local_engine())
+            elif effective_engine == "hybrid":
+                runner_task = asyncio.create_task(run_hybrid_engine())
+            else:
+                runner_task = asyncio.create_task(run_agy_engine())
+
             while True:
                 item = await event_queue.get()
                 if item is None:
@@ -500,7 +681,6 @@ async def ocr_convert_pdf_source(
                     wt.cancel()
             if runner_task and not runner_task.done():
                 runner_task.cancel()
-            # Ensure partial progress is flushed cleanly if cancelled mid-book
             if not completed_normally and results_by_page:
                 try:
                     await persist_checkpoint(with_chunks=True)
@@ -511,6 +691,8 @@ async def ocr_convert_pdf_source(
                     await agy_service.release_worker(tk, model)
                 except Exception:
                     pass
+            with fitz_lock:
+                shared_doc.close()
             shutil.rmtree(temp_dir, ignore_errors=True)
 
     return StreamingResponse(

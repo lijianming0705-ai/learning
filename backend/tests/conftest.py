@@ -139,11 +139,25 @@ def test_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
             },
         )
 
-    async def fake_synthesize_to_file(text: str, language: str, out_base_path: Path) -> Path | None:
+    async def fake_synthesize_to_file(
+        text: str,
+        language: str,
+        out_base_path: Path,
+        *,
+        engine: str | None = None,
+        voice: str | None = None,
+        model: str | None = None,
+    ) -> Path | None:
         out_base_path.parent.mkdir(parents=True, exist_ok=True)
-        mp3_path = out_base_path.with_suffix(".mp3")
-        mp3_path.write_bytes(b"ID3\x03\x00\x00\x00\x00\x00\x00" + b"\x00" * 160)
-        return mp3_path
+        wav_path = out_base_path.with_suffix(".wav")
+        # Minimal valid WAV header (44 bytes) + 160 bytes PCM payload (>128 bytes)
+        wav_header = b"RIFF" + (196).to_bytes(4, "little") + b"WAVEfmt " + (16).to_bytes(4, "little")
+        wav_header += (1).to_bytes(2, "little") + (1).to_bytes(2, "little")
+        wav_header += (24000).to_bytes(4, "little") + (48000).to_bytes(4, "little")
+        wav_header += (2).to_bytes(2, "little") + (16).to_bytes(2, "little")
+        wav_header += b"data" + (160).to_bytes(4, "little")
+        wav_path.write_bytes(wav_header + b"\x00" * 160)
+        return wav_path
 
     import app.routers.speech as speech_router
     import app.services.tts_service as tts_service

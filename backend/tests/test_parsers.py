@@ -145,3 +145,62 @@ def test_scanned_pdf_detection_and_region_crop(tmp_path: Path) -> None:
     assert crop_out.exists()
     assert crop_out.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"
 
+
+def test_reconstruct_layout_from_ocr_lines() -> None:
+    from app.services.ocr_service import OcrLine, reconstruct_layout_from_ocr_lines
+
+    lines = [
+        # Running header at very top
+        OcrLine(text="12 | 启示录：打造用户喜爱的产品", x=0.10, y=0.03, w=0.45, h=0.016),
+        # Large centered chapter title
+        OcrLine(text="第1章 关键角色及其职责", x=0.22, y=0.12, w=0.56, h=0.036),
+        # Indented paragraph across two lines
+        OcrLine(text="在现代软件团队中，产品经", x=0.16, y=0.20, w=0.72, h=0.020),
+        OcrLine(text="理需要与设计师紧密协作。", x=0.10, y=0.23, w=0.42, h=0.020),
+        # Unordered list
+        OcrLine(text="• 定义产品愿景与核心价值", x=0.10, y=0.30, w=0.50, h=0.020),
+        OcrLine(text="• 持续验证用户真实需求", x=0.10, y=0.34, w=0.48, h=0.020),
+        # Figure caption right below figure
+        OcrLine(text="图 1-1 产品探索流程示意图", x=0.28, y=0.69, w=0.44, h=0.018),
+        # Bottom running page number
+        OcrLine(text="12", x=0.48, y=0.94, w=0.04, h=0.015),
+    ]
+    figures = [{"bbox": {"x": 0.15, "y": 0.42, "width": 0.70, "height": 0.25}, "width_pct": 70}]
+
+    layout = reconstruct_layout_from_ocr_lines(lines, figures=figures)
+    assert layout["layout_columns"] == 1
+    blocks = layout["blocks"]
+    types = [b["type"] for b in blocks]
+    assert "heading" in types
+    assert "paragraph" in types
+    assert "list" in types
+    assert "figure" in types
+
+    para = [b for b in blocks if b["type"] == "paragraph"][0]
+    assert para["text"] == "在现代软件团队中，产品经理需要与设计师紧密协作。"
+    assert para["indent"] is True
+
+    fig = [b for b in blocks if b["type"] == "figure"][0]
+    assert fig["caption"] == "图 1-1 产品探索流程示意图"
+
+    lst = [b for b in blocks if b["type"] == "list"][0]
+    assert lst["ordered"] is False
+    assert lst["items"] == ["定义产品愿景与核心价值", "持续验证用户真实需求"]
+
+    # Verify running header/footer were stripped
+    all_text = str(blocks)
+    assert "12 | 启示录" not in all_text
+
+    # 2-column detection
+    col_lines = [
+        OcrLine(text="Left Col Line 1", x=0.08, y=0.15, w=0.36, h=0.02),
+        OcrLine(text="Left Col Line 2", x=0.08, y=0.19, w=0.36, h=0.02),
+        OcrLine(text="Left Col Line 3", x=0.08, y=0.23, w=0.36, h=0.02),
+        OcrLine(text="Right Col Line 1", x=0.54, y=0.15, w=0.36, h=0.02),
+        OcrLine(text="Right Col Line 2", x=0.54, y=0.19, w=0.36, h=0.02),
+        OcrLine(text="Right Col Line 3", x=0.54, y=0.23, w=0.36, h=0.02),
+    ]
+    col_layout = reconstruct_layout_from_ocr_lines(col_lines)
+    assert col_layout["layout_columns"] == 2
+    assert any(b["type"] == "columns" for b in col_layout["blocks"])
+

@@ -26,23 +26,40 @@ def test_full_study_workflow_and_rag_persistence(test_client, tmp_path: Path) ->
     # 1. Health & agy models & default hydrogen medium setting + user selection persistence
     h_resp = test_client.get("/api/health")
     assert h_resp.status_code == 200
+    assert "local_ocr_available" in h_resp.json()
+    assert "local_ocr_engine" in h_resp.json()
+    assert "local_tts_available" in h_resp.json()
+    assert "local_tts_engine" in h_resp.json()
     m_resp = test_client.get("/api/agy/models")
     assert m_resp.status_code == 200
     assert m_resp.json()[0]["id"] == "gemini-4-hydrogen-medium"
     s_resp = test_client.get("/api/settings")
     assert s_resp.status_code == 200
     assert s_resp.json()["default_model"] == "gemini-4-hydrogen-medium"
+    assert s_resp.json()["tts_engine"] == "mlx-audio"
+    assert s_resp.json()["mlx_tts_voice"] == "Vivian"
 
-    # Remember user's last selected model across DB re-init
-    upd_s = test_client.patch("/api/settings", json={"default_model": "gemini-4-neon-high"})
+    # Remember user's last selected model & TTS settings across DB re-init
+    upd_s = test_client.patch(
+        "/api/settings",
+        json={"default_model": "gemini-4-neon-high", "tts_engine": "edge-tts", "mlx_tts_voice": "Ryan"},
+    )
     assert upd_s.status_code == 200
     assert upd_s.json()["default_model"] == "gemini-4-neon-high"
+    assert upd_s.json()["tts_engine"] == "edge-tts"
+    assert upd_s.json()["mlx_tts_voice"] == "Ryan"
     from app.db import init_study_db
 
     init_study_db()
-    assert test_client.get("/api/settings").json()["default_model"] == "gemini-4-neon-high"
+    restored_s = test_client.get("/api/settings").json()
+    assert restored_s["default_model"] == "gemini-4-neon-high"
+    assert restored_s["tts_engine"] == "edge-tts"
+    assert restored_s["mlx_tts_voice"] == "Ryan"
     # Restore default for remaining assertions
-    test_client.patch("/api/settings", json={"default_model": "gemini-4-hydrogen-medium"})
+    test_client.patch(
+        "/api/settings",
+        json={"default_model": "gemini-4-hydrogen-medium", "tts_engine": "mlx-audio", "mlx_tts_voice": "Vivian"},
+    )
 
     # 2. Create notebook
     nb_resp = test_client.post(
@@ -195,7 +212,7 @@ def test_full_study_workflow_and_rag_persistence(test_client, tmp_path: Path) ->
     assert img_resp.status_code == 200
     assert img_resp.content[:8] == b"\x89PNG\r\n\x1a\n"
 
-    ocr_resp = test_client.post(f"/api/highlights/{area_data['id']}/ocr", json={})
+    ocr_resp = test_client.post(f"/api/highlights/{area_data['id']}/ocr", json={"engine": "agy"})
     assert ocr_resp.status_code == 200
     assert "E = mc^2" in ocr_resp.json()["quote_text"]
 
@@ -209,7 +226,7 @@ def test_full_study_workflow_and_rag_persistence(test_client, tmp_path: Path) ->
     # 9b-2. One-click scanned PDF layout-preserving OCR -> structured text edition + assets + export
     conv_resp = test_client.post(
         f"/api/sources/{scan_src['id']}/ocr-convert",
-        json={"start_page": 1, "end_page": 1, "title": "扫描讲义 OCR 排版版"},
+        json={"engine": "agy", "start_page": 1, "end_page": 1, "title": "扫描讲义 OCR 排版版"},
     )
     assert conv_resp.status_code == 200
     conv_events = _parse_sse_events(conv_resp.text)
@@ -271,7 +288,7 @@ def test_full_study_workflow_and_rag_persistence(test_client, tmp_path: Path) ->
 
     fb_conv = test_client.post(
         f"/api/sources/{fb_src['id']}/ocr-convert",
-        json={"full_book": True, "concurrency": 2, "title": "全本扫描书 OCR 版"},
+        json={"engine": "agy", "full_book": True, "concurrency": 2, "title": "全本扫描书 OCR 版"},
     )
     assert fb_conv.status_code == 200
     fb_events = _parse_sse_events(fb_conv.text)
@@ -312,6 +329,22 @@ def test_full_study_workflow_and_rag_persistence(test_client, tmp_path: Path) ->
     get_speech = test_client.get(f"/api/sources/{source_id}/speech-script")
     assert get_speech.status_code == 200
     assert len(get_speech.json()["segments"]) == 2
+
+    stream_speech = test_client.post(
+        f"/api/sources/{source_id}/speech-script/stream",
+        json={"force_regenerate": True},
+    )
+    assert stream_speech.status_code == 200
+    speech_sse = _parse_sse_events(stream_speech.text)
+    speech_ev_names = [n for n, _ in speech_sse]
+    assert "start" in speech_ev_names
+    assert "progress" in speech_ev_names
+    assert "done" in speech_ev_names
+    speech_progress_evts = [d for n, d in speech_sse if n == "progress"]
+    assert speech_progress_evts[-1]["percent"] == 100
+    speech_done_evt = [d for n, d in speech_sse if n == "done"][-1]
+    assert len(speech_done_evt["segments"]) == 2
+    segs = speech_done_evt["segments"]
 
     seg_audio = test_client.get(segs[1]["audio_url"])
     assert seg_audio.status_code == 200
@@ -424,3 +457,102 @@ def test_full_study_workflow_and_rag_persistence(test_client, tmp_path: Path) ->
     assert del_resp.status_code == 200
     stats_after = test_client.get("/api/rag/stats").json()
     assert stats_after["total_documents"] == 0
+
+
+def test_local_vision_ocr_end_to_end(test_client, tmp_path: Path) -> None:
+    import sys
+
+    if sys.platform != "darwin":
+        return
+
+    h = test_client.get("/api/health").json()
+    assert h["local_ocr_available"] is True
+    assert h["local_ocr_engine"] == "apple-vision"
+
+    nb_resp = test_client.post("/api/notebooks", json={"title": "本地 Vision OCR 测试"})
+    assert nb_resp.status_code == 201
+    nb_id = nb_resp.json()["id"]
+
+    # Build a 2-page scanned raster PDF with text + a dark illustration rectangle
+    src_doc = fitz.open()
+    for pno in (1, 2):
+        pg = src_doc.new_page(width=600, height=820)
+        pg.insert_text((180, 70), f"Chapter {pno}: Product Discovery", fontsize=22)
+        pg.insert_text((70, 140), "Teams must test value, usability, and feasibility early.", fontsize=13)
+        pg.insert_text((70, 170), "Continuous iteration reduces product delivery risk.", fontsize=13)
+        # Draw a distinct non-text figure box in the middle
+        fig_rect = fitz.Rect(120, 260, 480, 480)
+        pg.draw_rect(fig_rect, color=(0.1, 0.2, 0.5), fill=(0.82, 0.88, 0.96), width=3)
+        pg.draw_circle(fitz.Point(300, 370), 65, color=(0.8, 0.2, 0.2), fill=(0.95, 0.7, 0.7), width=3)
+        pg.insert_text((220, 510), f"Figure {pno}.1 System Architecture", fontsize=11)
+
+    scanned_pdf = tmp_path / "vision_scanned_2p.pdf"
+    out_doc = fitz.open()
+    for pno in range(2):
+        pix = src_doc[pno].get_pixmap(matrix=fitz.Matrix(2.0, 2.0)).tobytes("png")
+        op = out_doc.new_page(width=600, height=820)
+        op.insert_image(op.rect, stream=pix)
+    src_doc.close()
+    out_doc.save(str(scanned_pdf))
+    out_doc.close()
+
+    with open(scanned_pdf, "rb") as f:
+        up = test_client.post(
+            f"/api/notebooks/{nb_id}/sources/upload",
+            files=[("files", ("vision_scanned_2p.pdf", f, "application/pdf"))],
+        )
+    assert up.status_code == 201
+    scan_src = up.json()[0]
+    assert scan_src["is_scanned"] is True
+
+    # Area highlight local OCR
+    area_hl = test_client.post(
+        f"/api/sources/{scan_src['id']}/highlights",
+        json={
+            "color": "amber",
+            "quote_text": "",
+            "note_text": "",
+            "anchor_type": "area",
+            "page_number": 1,
+            "rects": [{"x": 0.08, "y": 0.14, "width": 0.84, "height": 0.12}],
+        },
+    )
+    assert area_hl.status_code == 201
+    hl_id = area_hl.json()["id"]
+    local_ocr = test_client.post(f"/api/highlights/{hl_id}/ocr", json={"engine": "local"})
+    assert local_ocr.status_code == 200
+    assert "usability" in local_ocr.json()["quote_text"].lower()
+
+    # Full-book local Vision OCR conversion
+    conv = test_client.post(
+        f"/api/sources/{scan_src['id']}/ocr-convert",
+        json={"engine": "local", "full_book": True, "concurrency": 2, "title": "本地 Vision OCR 输出"},
+    )
+    assert conv.status_code == 200
+    events = _parse_sse_events(conv.text)
+    start_ev = [d for n, d in events if n == "start"][0]
+    assert start_ev["engine"] == "local"
+    done_ev = [d for n, d in events if n == "done"][-1]
+    assert done_ev["failed_pages"] == 0
+    assert done_ev["total_figures"] >= 2
+    out_src = done_ev["source"]
+    assert out_src["page_count"] == 2
+    assert "Product Discovery" in out_src["plain_text"]
+    assert f"/api/sources/{out_src['id']}/assets/p1_fig1.png" in out_src["html_content"]
+
+
+def test_tts_service_wav_and_cache_keys(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("STUDY_DATA_DIR", str(tmp_path / "tts_data"))
+    from app.services.tts_service import clip_cache_path, media_type_for_audio, mlx_lang_code
+
+    assert media_type_for_audio(Path("clip.wav")) == "audio/wav"
+    assert media_type_for_audio(Path("clip.mp3")) == "audio/mpeg"
+    assert mlx_lang_code("zh-CN") == "chinese"
+    assert mlx_lang_code("en-US") == "english"
+
+    p_vivian = clip_cache_path("你好，我是VAE", "zh-CN", engine="mlx-audio", voice="Vivian")
+    p_ryan = clip_cache_path("你好，我是VAE", "zh-CN", engine="mlx-audio", voice="Ryan")
+    p_edge = clip_cache_path("你好，我是VAE", "zh-CN", engine="edge-tts", voice="Vivian")
+    assert p_vivian != p_ryan
+    assert p_vivian != p_edge
+    assert p_vivian.name.startswith("sel_")

@@ -5,7 +5,14 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from typing import Iterator
 
-from app.config import DEFAULT_MODEL, ensure_data_dirs, get_paths
+from app.config import (
+    DEFAULT_MLX_TTS_MODEL,
+    DEFAULT_MLX_TTS_VOICE,
+    DEFAULT_MODEL,
+    DEFAULT_TTS_ENGINE,
+    ensure_data_dirs,
+    get_paths,
+)
 
 DEFAULT_SETTINGS: dict[str, str] = {
     "default_model": DEFAULT_MODEL,
@@ -14,6 +21,9 @@ DEFAULT_SETTINGS: dict[str, str] = {
     "cross_notebook_rag": "true",
     "embedding_provider": "hybrid-local",
     "ollama_embedding_model": "",
+    "tts_engine": DEFAULT_TTS_ENGINE,
+    "mlx_tts_voice": DEFAULT_MLX_TTS_VOICE,
+    "mlx_tts_model": DEFAULT_MLX_TTS_MODEL,
 }
 
 SCHEMA_SQL = """

@@ -1,0 +1,1521 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MindBubble · 设置与时光机</title>
+  <style>
+    :root {
+      --bg-deep: #060a14;
+      --bg-mid: #0e172c;
+      --glass-bg: rgba(12, 20, 38, 0.74);
+      --glass-bg-strong: rgba(14, 23, 44, 0.9);
+      --glass-border: rgba(148, 163, 184, 0.18);
+      --glass-border-hover: rgba(186, 230, 253, 0.38);
+      --text-primary: #f8fafc;
+      --text-secondary: #cbd5e1;
+      --text-muted: #94a3b8;
+      --gold: #fbbf24;
+      --cyan: #38bdf8;
+      --violet: #a78bfa;
+      --emerald: #34d399;
+      --rose: #fb7185;
+      --font-sans: "Inter", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", -apple-system, BlinkMacSystemFont, sans-serif;
+      --shadow-lg: 0 18px 46px rgba(2, 6, 23, 0.62);
+      --shadow-md: 0 8px 24px rgba(2, 6, 23, 0.45);
+      --blur: blur(18px);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      min-height: 100%;
+      background: radial-gradient(circle at 24% 14%, #13203d 0%, #091022 48%, #050811 100%);
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    a { color: inherit; text-decoration: none; }
+
+    .page-shell {
+      max-width: 1320px;
+      margin: 0 auto;
+      padding: 18px 20px 36px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    /* Top Header */
+    .top-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 10px 16px;
+      border-radius: 16px;
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      backdrop-filter: var(--blur);
+      -webkit-backdrop-filter: var(--blur);
+      box-shadow: var(--shadow-md);
+      flex-wrap: wrap;
+    }
+
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-orb {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 32% 28%, #e0f2fe 0%, #38bdf8 38%, #818cf8 74%, #1e1b4b 100%);
+      box-shadow: 0 0 16px rgba(56, 189, 248, 0.55), inset 0 -2px 6px rgba(15, 23, 42, 0.65);
+      flex-shrink: 0;
+    }
+
+    .header-title {
+      font-size: 15.5px;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+    }
+
+    .header-sub {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .status-pill {
+      font-size: 12px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(52, 211, 153, 0.35);
+      background: rgba(16, 185, 129, 0.12);
+      color: #6ee7b7;
+      white-space: nowrap;
+    }
+
+    .glass-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 7px 13px;
+      border-radius: 10px;
+      border: 1px solid var(--glass-border);
+      background: rgba(15, 23, 42, 0.72);
+      color: var(--text-secondary);
+      font-family: inherit;
+      font-size: 12.5px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      white-space: nowrap;
+    }
+
+    .glass-btn:hover {
+      background: rgba(30, 41, 59, 0.9);
+      border-color: var(--glass-border-hover);
+      color: #ffffff;
+    }
+
+    .glass-btn.primary {
+      border-color: rgba(56, 189, 248, 0.58);
+      background: linear-gradient(135deg, rgba(14, 165, 233, 0.45), rgba(99, 102, 241, 0.45));
+      color: #ffffff;
+      font-weight: 600;
+    }
+
+    .glass-btn.primary:hover {
+      background: linear-gradient(135deg, rgba(56, 189, 248, 0.65), rgba(129, 140, 248, 0.65));
+      box-shadow: 0 0 20px rgba(56, 189, 248, 0.28);
+    }
+
+    .glass-btn.gold {
+      border-color: rgba(251, 191, 36, 0.48);
+      background: rgba(251, 191, 36, 0.16);
+      color: #fde68a;
+      font-weight: 600;
+    }
+
+    .glass-btn.gold:hover {
+      background: rgba(251, 191, 36, 0.26);
+      border-color: rgba(251, 191, 36, 0.8);
+    }
+
+    .glass-btn.danger {
+      border-color: rgba(251, 113, 133, 0.36);
+      color: #fda4af;
+    }
+
+    .glass-btn.danger:hover {
+      background: rgba(244, 63, 94, 0.2);
+      border-color: rgba(251, 113, 133, 0.72);
+      color: #ffe4e6;
+    }
+
+    /* Main 2-Column Workspace */
+    .workspace-grid {
+      display: grid;
+      grid-template-columns: 236px minmax(0, 1fr);
+      gap: 16px;
+      align-items: start;
+    }
+
+    .side-nav {
+      position: sticky;
+      top: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 10px;
+      border-radius: 18px;
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      backdrop-filter: var(--blur);
+      box-shadow: var(--shadow-md);
+    }
+
+    .nav-btn {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--text-secondary);
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      text-align: left;
+      transition: all 0.14s ease;
+    }
+
+    .nav-btn:hover {
+      background: rgba(30, 41, 59, 0.65);
+      color: #ffffff;
+    }
+
+    .nav-btn.active {
+      background: linear-gradient(135deg, rgba(56, 189, 248, 0.2), rgba(167, 139, 250, 0.16));
+      border-color: rgba(56, 189, 248, 0.45);
+      color: #f8fafc;
+      font-weight: 600;
+    }
+
+    .main-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      min-width: 0;
+    }
+
+    .tab-pane {
+      display: none;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .tab-pane.active {
+      display: flex;
+    }
+
+    .glass-card {
+      padding: 16px 18px;
+      border-radius: 18px;
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      backdrop-filter: var(--blur);
+      -webkit-backdrop-filter: var(--blur);
+      box-shadow: var(--shadow-md);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .card-title-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .card-title {
+      font-size: 14.5px;
+      font-weight: 700;
+      color: #f8fafc;
+    }
+
+    .hint-text {
+      font-size: 12px;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+
+    .glass-input, .glass-select {
+      border-radius: 10px;
+      border: 1px solid rgba(148, 163, 184, 0.24);
+      background: rgba(8, 14, 28, 0.76);
+      color: var(--text-primary);
+      font-family: inherit;
+      font-size: 12.8px;
+      padding: 8px 11px;
+      outline: none;
+      transition: border-color 0.14s ease;
+    }
+
+    .glass-input:focus, .glass-select:focus {
+      border-color: rgba(56, 189, 248, 0.68);
+    }
+
+    .row-flex {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .filter-pills {
+      display: inline-flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .pill-btn {
+      padding: 5px 11px;
+      border-radius: 999px;
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      background: rgba(15, 23, 42, 0.6);
+      color: var(--text-muted);
+      font-family: inherit;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.12s ease;
+    }
+
+    .pill-btn.active {
+      border-color: rgba(56, 189, 248, 0.55);
+      background: rgba(56, 189, 248, 0.2);
+      color: #e0f2fe;
+      font-weight: 600;
+    }
+
+    /* Time Machine Scrubber */
+    .scrubber-wrap {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 12px 14px;
+      border-radius: 14px;
+      background: rgba(8, 14, 28, 0.62);
+      border: 1px solid rgba(56, 189, 248, 0.2);
+    }
+
+    .scrubber-range {
+      width: 100%;
+      accent-color: #38bdf8;
+      cursor: pointer;
+    }
+
+    .scrubber-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 11.5px;
+      color: var(--text-muted);
+      gap: 8px;
+    }
+
+    /* Time Machine Split */
+    .tm-split {
+      display: grid;
+      grid-template-columns: minmax(290px, 360px) minmax(0, 1fr);
+      gap: 14px;
+      align-items: start;
+    }
+
+    .tm-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-height: 610px;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+
+    .snap-card {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      padding: 11px 12px;
+      border-radius: 13px;
+      border: 1px solid rgba(148, 163, 184, 0.16);
+      background: rgba(9, 15, 30, 0.62);
+      cursor: pointer;
+      text-align: left;
+      transition: all 0.14s ease;
+    }
+
+    .snap-card:hover {
+      border-color: rgba(186, 230, 253, 0.36);
+      background: rgba(20, 31, 56, 0.72);
+    }
+
+    .snap-card.active {
+      border-color: rgba(56, 189, 248, 0.72);
+      background: rgba(14, 34, 62, 0.85);
+      box-shadow: 0 6px 20px rgba(2, 132, 199, 0.2);
+    }
+
+    .snap-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+    }
+
+    .snap-badges {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .rev-tag {
+      font-size: 11px;
+      font-weight: 700;
+      color: #cbd5e1;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .kind-badge {
+      font-size: 10.5px;
+      font-weight: 600;
+      padding: 1px 7px;
+      border-radius: 999px;
+    }
+
+    .kind-auto { background: rgba(56, 189, 248, 0.16); color: #7dd3fc; border: 1px solid rgba(56, 189, 248, 0.34); }
+    .kind-manual { background: rgba(251, 191, 36, 0.18); color: #fde68a; border: 1px solid rgba(251, 191, 36, 0.42); }
+    .kind-guard { background: rgba(52, 211, 153, 0.16); color: #6ee7b7; border: 1px solid rgba(52, 211, 153, 0.38); }
+
+    .snap-time {
+      font-size: 11px;
+      color: var(--text-muted);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .snap-label {
+      font-size: 13px;
+      font-weight: 600;
+      color: #f8fafc;
+      word-break: break-word;
+    }
+
+    .snap-summary {
+      font-size: 11.5px;
+      color: var(--text-muted);
+    }
+
+    /* Preview Pane */
+    .preview-pane {
+      padding: 16px;
+      border-radius: 16px;
+      background: rgba(8, 14, 28, 0.68);
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      min-height: 360px;
+    }
+
+    .diff-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .diff-chip {
+      font-size: 11.5px;
+      padding: 3px 9px;
+      border-radius: 999px;
+      border: 1px solid rgba(148, 163, 184, 0.2);
+      background: rgba(15, 23, 42, 0.72);
+      color: var(--text-secondary);
+    }
+
+    .diff-chip.add { border-color: rgba(52, 211, 153, 0.4); color: #6ee7b7; background: rgba(16, 185, 129, 0.12); }
+    .diff-chip.rem { border-color: rgba(251, 113, 133, 0.4); color: #fda4af; background: rgba(244, 63, 94, 0.12); }
+    .diff-chip.mod { border-color: rgba(251, 191, 36, 0.4); color: #fde68a; background: rgba(251, 191, 36, 0.12); }
+
+    .preview-task-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      max-height: 290px;
+      overflow-y: auto;
+    }
+
+    .preview-task-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 8px 10px;
+      border-radius: 10px;
+      background: rgba(15, 23, 42, 0.62);
+      border: 1px solid rgba(148, 163, 184, 0.14);
+      font-size: 12.5px;
+    }
+
+    .preview-task-row.done {
+      opacity: 0.68;
+      text-decoration: line-through;
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    /* Export / Import & Metrics */
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .metric-box {
+      padding: 12px 14px;
+      border-radius: 14px;
+      background: rgba(9, 15, 30, 0.66);
+      border: 1px solid rgba(148, 163, 184, 0.16);
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .metric-label { font-size: 11.5px; color: var(--text-muted); }
+    .metric-val { font-size: 19px; font-weight: 700; color: #f8fafc; font-variant-numeric: tabular-nums; }
+    .metric-sub { font-size: 11px; color: var(--text-muted); }
+
+    .export-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .dropzone {
+      border: 1.5px dashed rgba(56, 189, 248, 0.42);
+      border-radius: 14px;
+      padding: 22px 16px;
+      text-align: center;
+      background: rgba(8, 14, 28, 0.54);
+      cursor: pointer;
+      transition: all 0.15s ease;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      align-items: center;
+    }
+
+    .dropzone:hover, .dropzone.dragover {
+      border-color: #7dd3fc;
+      background: rgba(14, 34, 62, 0.66);
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .field-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-secondary);
+    }
+
+    .check-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: var(--text-primary);
+      cursor: pointer;
+    }
+
+    .toast-stack {
+      position: fixed;
+      right: 20px;
+      bottom: 20px;
+      z-index: 90;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      pointer-events: none;
+    }
+
+    .toast-item {
+      pointer-events: auto;
+      padding: 10px 14px;
+      border-radius: 12px;
+      background: rgba(12, 20, 38, 0.96);
+      border: 1px solid rgba(56, 189, 248, 0.48);
+      box-shadow: var(--shadow-lg);
+      font-size: 12.5px;
+      color: #f8fafc;
+    }
+
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-thumb { background: rgba(148, 163, 184, 0.28); border-radius: 999px; }
+
+    @media (max-width: 960px) {
+      .workspace-grid { grid-template-columns: 1fr; }
+      .side-nav { position: static; flex-direction: row; flex-wrap: wrap; }
+      .tm-split { grid-template-columns: 1fr; }
+      .metrics-grid { grid-template-columns: repeat(2, 1fr); }
+      .export-grid, .form-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page-shell">
+    <header class="top-header">
+      <div class="header-left">
+        <a href="/" class="glass-btn" id="back-to-canvas-btn">← 返回思维气泡</a>
+        <div class="brand-orb" aria-hidden="true"></div>
+        <div>
+          <div class="header-title">MindBubble · 设置中心与时光机</div>
+          <div class="header-sub">Time Machine 历史快照恢复 · 备份导出导入 · 后台 SQLite 存储管理</div>
+        </div>
+      </div>
+      <div class="header-right">
+        <span class="status-pill" id="header-status-pill">连接中...</span>
+      </div>
+    </header>
+
+    <div class="workspace-grid">
+      <nav class="side-nav" aria-label="设置导航">
+        <button class="nav-btn active" type="button" data-tab="timemachine">⏳ 时光机恢复 (Time Machine)</button>
+        <button class="nav-btn" type="button" data-tab="backup">📦 备份导出与导入</button>
+        <button class="nav-btn" type="button" data-tab="storage">💾 后台存储与策略</button>
+        <button class="nav-btn" type="button" data-tab="prefs">✦ AI 与画布偏好</button>
+      </nav>
+
+      <main class="main-panel">
+        <!-- Tab 1: Time Machine -->
+        <section class="tab-pane active" id="tab-timemachine">
+          <div class="glass-card">
+            <div class="card-title-row">
+              <div>
+                <div class="card-title">⏳ 时光机备份与版本恢复</div>
+                <p class="hint-text">每次新增、完成、连线、聚类或删除操作都会在后台 SQLite 自动留痕；恢复任意历史时间点前会自动创建安全保护点。</p>
+              </div>
+              <div class="row-flex">
+                <input class="glass-input" id="manual-label-input" type="text" placeholder="输入手动备份名称，如：Q2 规划定稿..." style="width:230px;" />
+                <button class="glass-btn gold" id="create-manual-btn" type="button">+ 立即创建手动备份</button>
+              </div>
+            </div>
+
+            <div class="row-flex" style="justify-content:space-between;">
+              <div class="filter-pills" id="tm-filter-pills">
+                <button class="pill-btn active" type="button" data-kind="all">全部快照</button>
+                <button class="pill-btn" type="button" data-kind="manual">手动备份</button>
+                <button class="pill-btn" type="button" data-kind="auto">自动快照</button>
+                <button class="pill-btn" type="button" data-kind="guard">安全保护点</button>
+              </div>
+              <input class="glass-input" id="tm-search-input" type="text" placeholder="筛选操作说明或标签..." style="width:210px;" />
+            </div>
+
+            <div class="scrubber-wrap" id="tm-scrubber-wrap">
+              <div class="scrubber-meta">
+                <span id="scrubber-left">较早快照</span>
+                <strong id="scrubber-center" style="color:#e0f2fe;">拖动时间轴滑块快速穿梭历史版本</strong>
+                <span id="scrubber-right">最新快照</span>
+              </div>
+              <input class="scrubber-range" id="tm-scrubber" type="range" min="0" max="0" value="0" disabled />
+            </div>
+
+            <div class="tm-split">
+              <div class="tm-list" id="tm-list"></div>
+              <div class="preview-pane" id="tm-preview">
+                <div class="hint-text">选择左侧任意历史快照，或拖动上方时间轴查看详情与差异对比。</div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Tab 2: Export & Import -->
+        <section class="tab-pane" id="tab-backup">
+          <div class="glass-card">
+            <div class="card-title">↓ 备份导出</div>
+            <p class="hint-text">支持导出包含完整 Time Machine 历史快照的归档文件（v2 格式），或仅导出当前工作区气泡数据用于轻量迁移。</p>
+            <div class="export-grid">
+              <div class="metric-box" style="gap:10px;">
+                <div class="card-title" style="font-size:13.5px;">完整时光机备份包（推荐）</div>
+                <p class="hint-text">包含当前全部气泡、连线、AI 星群、偏好设置以及后台所有历史时间点快照。</p>
+                <div>
+                  <button class="glass-btn primary" id="export-full-btn" type="button">↓ 导出完整备份包 (.json)</button>
+                </div>
+              </div>
+              <div class="metric-box" style="gap:10px;">
+                <div class="card-title" style="font-size:13.5px;">仅当前工作区快照</div>
+                <p class="hint-text">仅包含当前活跃与已完成任务气泡、手动连线及聚类状态，体积更小。</p>
+                <div>
+                  <button class="glass-btn" id="export-workspace-btn" type="button">↓ 导出当前工作区 (.json)</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="glass-card">
+            <div class="card-title">↑ 备份导入与恢复</div>
+            <p class="hint-text">支持导入 v2 完整备份包或旧版 v1 导出的 JSON 文件。导入前系统会自动保存一份「导入备份前自动保护」快照。</p>
+            <div class="dropzone" id="import-dropzone">
+              <div style="font-size:22px;">📦</div>
+              <div style="font-size:13.5px;font-weight:600;color:#e2e8f0;">点击选择备份 JSON 文件，或将文件拖入此处</div>
+              <div class="hint-text" id="import-file-name">支持 mindbubble-backup-*.json 与 mindbubble-todo-*.json</div>
+              <input type="file" id="backup-import-file" accept="application/json,.json" hidden />
+            </div>
+
+            <div id="import-preview-card" style="display:none;flex-direction:column;gap:12px;padding:14px;border-radius:14px;background:rgba(8,14,28,0.68);border:1px solid rgba(56,189,248,0.3);">
+              <div class="card-title-row">
+                <span class="card-title" style="font-size:13.5px;" id="import-summary-title">备份文件预览</span>
+                <span class="kind-badge kind-auto" id="import-format-badge">v2 完整备份</span>
+              </div>
+              <div class="diff-chips" id="import-meta-chips"></div>
+              <div class="field">
+                <span class="field-label">导入模式</span>
+                <div class="row-flex">
+                  <label class="check-row"><input type="radio" name="import-mode" value="merge" checked /> 恢复当前工作区并合并历史快照（推荐）</label>
+                  <label class="check-row"><input type="radio" name="import-mode" value="workspace_only" /> 仅恢复当前工作区（保留现有快照）</label>
+                  <label class="check-row"><input type="radio" name="import-mode" value="replace_all" /> 完全覆盖（替换工作区与全部快照）</label>
+                </div>
+              </div>
+              <div class="row-flex">
+                <button class="glass-btn primary" id="confirm-import-btn" type="button">↑ 确认导入此备份</button>
+                <button class="glass-btn" id="cancel-import-btn" type="button">取消</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Tab 3: Storage & Policy -->
+        <section class="tab-pane" id="tab-storage">
+          <div class="glass-card">
+            <div class="card-title-row">
+              <div>
+                <div class="card-title">💾 后台 SQLite 存储概览</div>
+                <div class="hint-text" id="storage-db-path">数据库路径：加载中...</div>
+              </div>
+              <button class="glass-btn" id="refresh-storage-btn" type="button">↻ 刷新状态</button>
+            </div>
+            <div class="metrics-grid" id="storage-metrics"></div>
+          </div>
+
+          <div class="glass-card">
+            <div class="card-title">⚙ 自动快照与保留策略</div>
+            <label class="check-row">
+              <input type="checkbox" id="cfg-auto-enabled" checked />
+              <span>开启操作自动快照（类 Time Machine 实时留痕）</span>
+            </label>
+            <div class="form-grid">
+              <div class="field">
+                <label class="field-label" for="cfg-min-interval">最小自动快照间隔</label>
+                <select class="glass-select" id="cfg-min-interval">
+                  <option value="0">每次变更立即留痕 (0 秒)</option>
+                  <option value="5">至少间隔 5 秒</option>
+                  <option value="30">至少间隔 30 秒</option>
+                  <option value="60">至少间隔 60 秒</option>
+                </select>
+              </div>
+              <div class="field">
+                <label class="field-label" for="cfg-max-auto">自动快照最大保留数（手动备份不受限）</label>
+                <select class="glass-select" id="cfg-max-auto">
+                  <option value="50">保留最近 50 条</option>
+                  <option value="120">保留最近 120 条</option>
+                  <option value="300">保留最近 300 条</option>
+                  <option value="500">保留最近 500 条</option>
+                </select>
+              </div>
+            </div>
+            <div>
+              <button class="glass-btn primary" id="save-config-btn" type="button">保存存储策略</button>
+            </div>
+          </div>
+
+          <div class="glass-card">
+            <div class="card-title">🧹 数据库维护与清理</div>
+            <div class="row-flex">
+              <button class="glass-btn" id="vacuum-db-btn" type="button">⚡ 压缩整理 SQLite 数据库 (VACUUM)</button>
+              <button class="glass-btn danger" id="purge-auto-btn" type="button">🧹 清理自动快照（保留手动备份）</button>
+              <button class="glass-btn danger" id="clear-workspace-btn" type="button">🗑 清空当前工作区（会先生成保护点）</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- Tab 4: AI & Canvas Preferences -->
+        <section class="tab-pane" id="tab-prefs">
+          <div class="glass-card">
+            <div class="card-title">✦ AI 语义聚类与 3D 画布默认偏好</div>
+            <p class="hint-text">这些设置会实时同步到后台 SQLite；API Key 仅保存在当前浏览器的 localStorage，不会上传至后台数据库。</p>
+            <div class="form-grid">
+              <div class="field">
+                <label class="field-label" for="pref-ai-mode">聚类引擎模式</label>
+                <select class="glass-select" id="pref-ai-mode">
+                  <option value="agy">AGY 本地智能引擎（默认 · 免 API Key）</option>
+                  <option value="builtin">内置离线语义引擎（零延迟离线）</option>
+                  <option value="llm">外部大模型 API</option>
+                </select>
+              </div>
+              <div class="field" id="pref-agy-box">
+                <div style="display:flex;align-items:center;justify-content:space-between;">
+                  <label class="field-label" for="pref-agy-model">AGY 默认模型</label>
+                  <span class="hint-text" id="pref-agy-status">检测中...</span>
+                </div>
+                <select class="glass-select" id="pref-agy-model">
+                  <option value="gemini-4-hydrogen-medium">Gemini 4 Hydrogen (Medium)</option>
+                </select>
+              </div>
+            </div>
+            <div id="pref-llm-box" style="display:none;flex-direction:column;gap:12px;">
+              <div class="form-grid">
+                <div class="field">
+                  <label class="field-label" for="pref-llm-provider">外部模型接口预设</label>
+                  <select class="glass-select" id="pref-llm-provider">
+                    <option value="gemini">Google Gemini API</option>
+                    <option value="openai">OpenAI / DeepSeek / Ollama 兼容</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label class="field-label" for="pref-llm-model">模型名称</label>
+                  <input class="glass-input" id="pref-llm-model" type="text" />
+                </div>
+              </div>
+              <div class="field">
+                <label class="field-label" for="pref-llm-endpoint">API Endpoint</label>
+                <input class="glass-input" id="pref-llm-endpoint" type="text" />
+              </div>
+              <div class="field">
+                <label class="field-label" for="pref-llm-key">API Key（仅保存在本地浏览器 localStorage）</label>
+                <input class="glass-input" id="pref-llm-key" type="password" placeholder="粘贴你的 API Key..." />
+              </div>
+            </div>
+
+            <div class="form-grid" style="padding-top:6px;border-top:1px solid rgba(148,163,184,0.14);">
+              <div class="field">
+                <label class="field-label" for="pref-view-mode">默认 3D 视图模式</label>
+                <select class="glass-select" id="pref-view-mode">
+                  <option value="cluster">AI 语义星群聚类</option>
+                  <option value="free">自由星云分布</option>
+                </select>
+              </div>
+              <div class="field" style="justify-content:flex-end;gap:8px;">
+                <label class="check-row"><input type="checkbox" id="pref-show-ai-links" /> 默认显示 AI 语义虚线关联</label>
+                <label class="check-row"><input type="checkbox" id="pref-show-completed" /> 默认显示已完成气泡</label>
+                <label class="check-row"><input type="checkbox" id="pref-auto-rotate" /> 开启 3D 缓慢自动巡航</label>
+              </div>
+            </div>
+
+            <div class="form-grid" style="padding-top:6px;border-top:1px solid rgba(148,163,184,0.14);">
+              <div class="field">
+                <label class="field-label" for="pref-default-filter-tag">默认启动筛选标签（进入主页面自动筛选）</label>
+                <select class="glass-select" id="pref-default-filter-tag"></select>
+              </div>
+              <div class="field">
+                <label class="field-label" for="pref-today-default-tag">「今天完成」视图默认筛选标签</label>
+                <select class="glass-select" id="pref-today-default-tag"></select>
+              </div>
+            </div>
+
+            <div>
+              <button class="glass-btn primary" id="save-prefs-btn" type="button">保存 AI 与画布偏好</button>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <div class="toast-stack" id="toast-stack"></div>
+
+  <script>
+    (() => {
+      'use strict';
+
+      const LLM_KEY_STORAGE = 'mindbubble_llm_key_v1';
+      const STORAGE_KEY = 'mindbubble_todo_v1';
+
+      const settingsState = {
+        snapshots: [],
+        selectedSnapshotId: null,
+        selectedDetail: null,
+        filterKind: 'all',
+        searchQuery: '',
+        storageInfo: null,
+        liveState: null,
+        pendingImportData: null
+      };
+
+      const escapeHtml = (str) => String(str ?? '').replace(/[&<>"']/g, ch => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      }[ch]));
+
+      const formatTime = (ms) => {
+        if (!ms) return '—';
+        const d = new Date(ms);
+        const pad = n => String(n).padStart(2, '0');
+        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+      };
+
+      const formatBytes = (bytes) => {
+        if (!bytes) return '0 KB';
+        if (bytes < 1024) return `${bytes} B`;
+        if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+        return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+      };
+
+      function showToast(msg) {
+        const stack = document.getElementById('toast-stack');
+        const el = document.createElement('div');
+        el.className = 'toast-item';
+        el.textContent = msg;
+        stack.appendChild(el);
+        setTimeout(() => { if (el.isConnected) el.remove(); }, 4200);
+      }
+
+      async function apiJson(url, options = {}) {
+        const res = await fetch(url, { cache: 'no-store', ...options });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+        return data;
+      }
+
+      function kindMeta(kind) {
+        if (kind === 'manual') return { text: '手动备份', cls: 'kind-manual' };
+        if (kind && kind.startsWith('pre_')) return { text: '安全保护', cls: 'kind-guard' };
+        return { text: '自动快照', cls: 'kind-auto' };
+      }
+
+      // ---------- Data Loaders ----------
+      async function refreshAll() {
+        await Promise.all([loadStorageInfo(), loadSnapshots(), loadLiveState()]);
+      }
+
+      async function loadStorageInfo() {
+        const info = await apiJson('/api/storage/info');
+        settingsState.storageInfo = info;
+
+        document.getElementById('header-status-pill').textContent =
+          `SQLite 已连接 · 修订 #${info.revision} · ${info.snapshotCounts.total} 个快照`;
+
+        document.getElementById('storage-db-path').textContent = `数据库路径：${info.dbPath}`;
+        document.getElementById('storage-metrics').innerHTML = `
+          <div class="metric-box">
+            <span class="metric-label">SQLite 存储体积</span>
+            <span class="metric-val">${formatBytes(info.dbSizeBytes)}</span>
+            <span class="metric-sub">WAL 事务持久化</span>
+          </div>
+          <div class="metric-box">
+            <span class="metric-label">当前修订版本</span>
+            <span class="metric-val">#${info.revision}</span>
+            <span class="metric-sub">更新于 ${formatTime(info.updatedAt)}</span>
+          </div>
+          <div class="metric-box">
+            <span class="metric-label">当前工作区数据</span>
+            <span class="metric-val">${info.liveCounts.tasks} 气泡</span>
+            <span class="metric-sub">${info.liveCounts.completed} 已完成 · ${info.liveCounts.manualLinks} 连线 · ${info.liveCounts.clusters} 星群</span>
+          </div>
+          <div class="metric-box">
+            <span class="metric-label">Time Machine 快照</span>
+            <span class="metric-val">${info.snapshotCounts.total}</span>
+            <span class="metric-sub">手动 ${info.snapshotCounts.manual} · 自动 ${info.snapshotCounts.auto} · 保护 ${info.snapshotCounts.guard}</span>
+          </div>
+        `;
+
+        const cfg = info.backupConfig || {};
+        document.getElementById('cfg-auto-enabled').checked = Boolean(cfg.autoBackupEnabled);
+        document.getElementById('cfg-min-interval').value = String(cfg.minIntervalSec ?? 0);
+        document.getElementById('cfg-max-auto').value = String(cfg.maxAutoSnapshots ?? 120);
+      }
+
+      function syncPrefModeUi(mode) {
+        document.getElementById('pref-agy-box').style.display = mode === 'agy' ? 'flex' : 'none';
+        document.getElementById('pref-llm-box').style.display = mode === 'llm' ? 'flex' : 'none';
+      }
+
+      async function loadAgyModels(selectedModel) {
+        const sel = document.getElementById('pref-agy-model');
+        const st = document.getElementById('pref-agy-status');
+        try {
+          const data = await apiJson('/api/ai/models');
+          if (Array.isArray(data.models) && data.models.length) {
+            sel.innerHTML = data.models
+              .map(m => `<option value="${escapeHtml(m.id)}">${escapeHtml(m.name || m.id)}</option>`)
+              .join('');
+          }
+          const target = selectedModel || data.defaultModel || 'gemini-4-hydrogen-medium';
+          if ([...sel.options].some(o => o.value === target)) sel.value = target;
+          st.textContent = data.available ? '● AGY 已就绪' : '○ 未检测到 agy CLI';
+          st.style.color = data.available ? '#6ee7b7' : '#fda4af';
+        } catch (err) {
+          st.textContent = '○ 获取模型失败';
+          st.style.color = '#fda4af';
+        }
+      }
+
+      async function loadLiveState() {
+        const data = await apiJson('/api/state');
+        settingsState.liveState = data.state || { tasks: [], manualLinks: [], clusters: [], aiLinks: [], tagCatalog: [], prefs: {} };
+        const prefs = settingsState.liveState.prefs || {};
+        const aiMode = (!prefs.aiMode || (prefs.aiMode === 'builtin' && !prefs.aiModeUserSet)) ? 'agy' : prefs.aiMode;
+        document.getElementById('pref-ai-mode').value = aiMode;
+        syncPrefModeUi(aiMode);
+        await loadAgyModels(prefs.agyModel);
+        document.getElementById('pref-llm-provider').value = prefs.llmProvider || 'gemini';
+        document.getElementById('pref-llm-endpoint').value = prefs.llmEndpoint ||
+          'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
+        document.getElementById('pref-llm-model').value = prefs.llmModel || 'gemini-2.5-flash';
+        document.getElementById('pref-llm-key').value = localStorage.getItem(LLM_KEY_STORAGE) || '';
+        document.getElementById('pref-view-mode').value = prefs.viewMode || 'cluster';
+        document.getElementById('pref-show-ai-links').checked = prefs.showAiLinks !== false;
+        document.getElementById('pref-show-completed').checked = Boolean(prefs.showCompleted);
+        document.getElementById('pref-auto-rotate').checked = Boolean(prefs.autoRotate);
+
+        const tagPool = [];
+        const tagSeen = new Set();
+        const addTagOpt = (raw) => {
+          if (typeof raw !== 'string') return;
+          const clean = raw.trim().replace(/^#+/, '').trim().slice(0, 32);
+          if (!clean) return;
+          const key = clean.toLowerCase();
+          if (tagSeen.has(key)) return;
+          tagSeen.add(key);
+          tagPool.push(clean);
+        };
+        (settingsState.liveState.tagCatalog || []).forEach(addTagOpt);
+        (settingsState.liveState.tasks || []).forEach(t => (t.tags || []).forEach(addTagOpt));
+
+        const populateDefaultTagSelect = (selectId, savedTags, savedUntagged) => {
+          const sel = document.getElementById(selectId);
+          if (!sel) return;
+          const cleanSaved = Array.isArray(savedTags)
+            ? savedTags.map(t => String(t || '').trim().replace(/^#+/, '').trim()).filter(Boolean)
+            : [];
+          cleanSaved.forEach(addTagOpt);
+          const opts = [
+            '<option value="">全部（不筛选）</option>',
+            '<option value="__untagged__">无标签</option>',
+            ...tagPool.map(tag => `<option value="${escapeHtml(tag)}">#${escapeHtml(tag)}</option>`)
+          ];
+          if (!savedUntagged && cleanSaved.length >= 2) {
+            opts.push(`<option value="__multi__">多标签：${escapeHtml(cleanSaved.map(t => '#' + t).join(', '))}</option>`);
+          }
+          sel.innerHTML = opts.join('');
+          if (savedUntagged) sel.value = '__untagged__';
+          else if (cleanSaved.length >= 2) sel.value = '__multi__';
+          else if (cleanSaved.length === 1) sel.value = cleanSaved[0];
+          else sel.value = '';
+        };
+        populateDefaultTagSelect('pref-default-filter-tag', prefs.defaultFilterTags, Boolean(prefs.defaultFilterUntagged));
+        populateDefaultTagSelect('pref-today-default-tag', prefs.todayCompletedDefaultTags, Boolean(prefs.todayCompletedDefaultUntagged));
+      }
+
+      async function loadSnapshots() {
+        const data = await apiJson(`/api/snapshots?kind=${encodeURIComponent(settingsState.filterKind)}&limit=300`);
+        settingsState.snapshots = data.snapshots || [];
+        renderTimeline();
+      }
+
+      function getFilteredSnapshots() {
+        const q = settingsState.searchQuery.trim().toLowerCase();
+        if (!q) return settingsState.snapshots;
+        return settingsState.snapshots.filter(s =>
+          (s.label || '').toLowerCase().includes(q) ||
+          (s.summary || '').toLowerCase().includes(q) ||
+          `#${s.revision}`.includes(q)
+        );
+      }
+
+      function renderTimeline() {
+        const listEl = document.getElementById('tm-list');
+        const scrubber = document.getElementById('tm-scrubber');
+        const filtered = getFilteredSnapshots();
+        listEl.innerHTML = '';
+
+        if (!filtered.length) {
+          scrubber.disabled = true;
+          scrubber.max = '0';
+          scrubber.value = '0';
+          document.getElementById('scrubber-left').textContent = '暂无快照';
+          document.getElementById('scrubber-center').textContent = '创建或操作任务气泡后会自动生成时间轴';
+          document.getElementById('scrubber-right').textContent = '—';
+          listEl.innerHTML = '<div class="hint-text" style="padding:12px;">暂无符合条件的历史快照。</div>';
+          document.getElementById('tm-preview').innerHTML = '<div class="hint-text">当前尚无历史快照可预览。可点击右上角「立即创建手动备份」，或返回画布操作气泡后自动记录。</div>';
+          settingsState.selectedSnapshotId = null;
+          return;
+        }
+
+        // Select newest if current selection is missing
+        if (!filtered.some(s => s.id === settingsState.selectedSnapshotId)) {
+          settingsState.selectedSnapshotId = filtered[0].id;
+        }
+
+        // Scrubber runs left (oldest = 0) -> right (newest = len - 1)
+        scrubber.disabled = filtered.length <= 1;
+        scrubber.min = '0';
+        scrubber.max = String(filtered.length - 1);
+        const selIdxDesc = filtered.findIndex(s => s.id === settingsState.selectedSnapshotId);
+        const scrubPos = Math.max(0, filtered.length - 1 - selIdxDesc);
+        scrubber.value = String(scrubPos);
+
+        const oldest = filtered[filtered.length - 1];
+        const newest = filtered[0];
+        const selected = filtered[selIdxDesc] || newest;
+        document.getElementById('scrubber-left').textContent = `最早 #${oldest.revision} · ${formatTime(oldest.createdAt).slice(5)}`;
+        document.getElementById('scrubber-center').textContent = `正在预览 #${selected.revision} · ${selected.label} (${formatTime(selected.createdAt)})`;
+        document.getElementById('scrubber-right').textContent = `最新 #${newest.revision} · ${formatTime(newest.createdAt).slice(5)}`;
+
+        for (const snap of filtered) {
+          const km = kindMeta(snap.kind);
+          const card = document.createElement('button');
+          card.type = 'button';
+          card.className = `snap-card${snap.id === settingsState.selectedSnapshotId ? ' active' : ''}`;
+          card.innerHTML = `
+            <div class="snap-top">
+              <span class="snap-badges">
+                <span class="rev-tag">#${snap.revision}</span>
+                <span class="kind-badge ${km.cls}">${km.text}</span>
+              </span>
+              <span class="snap-time">${formatTime(snap.createdAt)}</span>
+            </div>
+            <div class="snap-label">${escapeHtml(snap.label)}</div>
+            <div class="snap-summary">${escapeHtml(snap.summary)} · ${snap.taskCount} 气泡</div>
+          `;
+          card.addEventListener('click', () => selectSnapshot(snap.id));
+          listEl.appendChild(card);
+        }
+
+        loadSnapshotPreview(settingsState.selectedSnapshotId);
+      }
+
+      function selectSnapshot(snapId) {
+        settingsState.selectedSnapshotId = snapId;
+        renderTimeline();
+      }
+
+      async function loadSnapshotPreview(snapId) {
+        const previewEl = document.getElementById('tm-preview');
+        if (!snapId) return;
+        try {
+          const detail = await apiJson(`/api/snapshots/${snapId}`);
+          if (settingsState.selectedSnapshotId !== snapId) return;
+          settingsState.selectedDetail = detail;
+
+          const snap = detail.snapshot;
+          const st = detail.state || { tasks: [], clusters: [], manualLinks: [] };
+          const diff = detail.diffAgainstCurrent || {};
+          const km = kindMeta(snap.kind);
+          const clusterMap = new Map((st.clusters || []).map(c => [c.id, c]));
+
+          const diffChips = [];
+          if ((diff.addedTasks || []).length) diffChips.push(`<span class="diff-chip add">恢复将新增 ${diff.addedTasks.length} 项：${escapeHtml(diff.addedTasks.slice(0, 3).join('、'))}</span>`);
+          if ((diff.removedTasks || []).length) diffChips.push(`<span class="diff-chip rem">恢复将移除 ${diff.removedTasks.length} 项：${escapeHtml(diff.removedTasks.slice(0, 3).join('、'))}</span>`);
+          if ((diff.modifiedTasks || []).length) diffChips.push(`<span class="diff-chip mod">内容差异 ${diff.modifiedTasks.length} 项</span>`);
+          if (diff.linkDelta) diffChips.push(`<span class="diff-chip">连线变化 ${diff.linkDelta > 0 ? '+' : ''}${diff.linkDelta}</span>`);
+          if (!diffChips.length) diffChips.push(`<span class="diff-chip">与当前工作区内容一致</span>`);
+
+          const tasks = st.tasks || [];
+          const top3 = tasks.filter(t => !t.completed && [0, 1, 2].includes(t.top3Slot)).sort((a, b) => a.top3Slot - b.top3Slot);
+
+          previewEl.innerHTML = `
+            <div class="card-title-row">
+              <div>
+                <div class="row-flex" style="gap:8px;">
+                  <span class="rev-tag" style="font-size:13px;">修订 #${snap.revision}</span>
+                  <span class="kind-badge ${km.cls}">${km.text}</span>
+                  <span class="card-title">${escapeHtml(snap.label)}</span>
+                </div>
+                <div class="hint-text">记录时间：${formatTime(snap.createdAt)} · ${snap.taskCount} 气泡 (${snap.completedCount} 已完成) · ${snap.linkCount} 连线 · ${snap.clusterCount} 星群</div>
+              </div>
+              <div class="row-flex">
+                <button class="glass-btn primary" id="restore-snap-btn" type="button">⟲ 恢复到此时间点</button>
+                <a class="glass-btn" href="/api/snapshots/${snap.id}/export" download>↓ 导出此快照</a>
+                <button class="glass-btn danger" id="delete-snap-btn" type="button">删除</button>
+              </div>
+            </div>
+
+            <div>
+              <div class="field-label" style="margin-bottom:6px;">相对当前工作区的差异对比</div>
+              <div class="diff-chips">${diffChips.join('')}</div>
+            </div>
+
+            ${top3.length ? `
+              <div>
+                <div class="field-label" style="margin-bottom:6px;">当时 Top 3 核心要务</div>
+                <div class="diff-chips">
+                  ${top3.map(t => `<span class="diff-chip mod">0${t.top3Slot + 1} · ${escapeHtml(t.title)}</span>`).join('')}
+                </div>
+              </div>
+            ` : ''}
+
+            <div>
+              <div class="field-label" style="margin-bottom:6px;">该时间点的全部任务气泡 (${tasks.length})</div>
+              <div class="preview-task-list">
+                ${tasks.length ? tasks.map(t => {
+                  const cl = clusterMap.get(t.clusterId);
+                  const dueStr = t.dueAt ? `⏰ ${formatTime(t.dueAt).slice(5, 16)}` : '';
+                  return `
+                    <div class="preview-task-row${t.completed ? ' done' : ''}">
+                      <span style="display:flex;align-items:center;gap:8px;min-width:0;">
+                        <span class="dot" style="background:${cl ? cl.color : '#38bdf8'};"></span>
+                        <span style="word-break:break-word;">${escapeHtml(t.title)}</span>
+                      </span>
+                      <span class="hint-text" style="flex-shrink:0;">${dueStr ? `${dueStr} · ` : ''}${t.completed ? '已完成' : (cl ? escapeHtml(cl.name) : '未聚类')}</span>
+                    </div>
+                  `;
+                }).join('') : '<div class="hint-text">此时间点为空白工作区（0 个气泡）。</div>'}
+              </div>
+            </div>
+          `;
+
+          previewEl.querySelector('#restore-snap-btn').addEventListener('click', async () => {
+            try {
+              const res = await apiJson(`/api/snapshots/${snap.id}/restore`, { method: 'POST' });
+              try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(res.state));
+              } catch (_) {}
+              showToast(`已恢复至版本 #${snap.revision}（恢复前状态已自动保存为安全保护点）`);
+              await refreshAll();
+            } catch (err) {
+              showToast(`恢复失败：${err.message}`);
+            }
+          });
+
+          previewEl.querySelector('#delete-snap-btn').addEventListener('click', async () => {
+            if (!window.confirm(`确定删除快照 #${snap.revision}「${snap.label}」吗？`)) return;
+            try {
+              await apiJson(`/api/snapshots/${snap.id}`, { method: 'DELETE' });
+              showToast('快照已删除');
+              await refreshAll();
+            } catch (err) {
+              showToast(`删除失败：${err.message}`);
+            }
+          });
+        } catch (err) {
+          previewEl.innerHTML = `<div class="hint-text">加载快照详情失败：${escapeHtml(err.message)}</div>`;
+        }
+      }
+
+      // ---------- Events ----------
+      function bindEvents() {
+        // Tab switching
+        document.querySelectorAll('.nav-btn').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const tab = btn.dataset.tab;
+            document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b === btn));
+            document.querySelectorAll('.tab-pane').forEach(p => p.classList.toggle('active', p.id === `tab-${tab}`));
+            history.replaceState(null, '', `#${tab}`);
+          });
+        });
+
+        // Manual snapshot creation
+        const createManual = async () => {
+          const inp = document.getElementById('manual-label-input');
+          try {
+            await apiJson('/api/snapshots', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ label: inp.value.trim() || '手动备份' })
+            });
+            inp.value = '';
+            showToast('已创建手动备份快照');
+            await refreshAll();
+          } catch (err) {
+            showToast(`创建失败：${err.message}`);
+          }
+        };
+        document.getElementById('create-manual-btn').addEventListener('click', createManual);
+        document.getElementById('manual-label-input').addEventListener('keydown', e => {
+          if (e.key === 'Enter') { e.preventDefault(); createManual(); }
+        });
+
+        // Filter pills & search
+        document.querySelectorAll('#tm-filter-pills .pill-btn').forEach(btn => {
+          btn.addEventListener('click', async () => {
+            settingsState.filterKind = btn.dataset.kind;
+            document.querySelectorAll('#tm-filter-pills .pill-btn').forEach(b => b.classList.toggle('active', b === btn));
+            await loadSnapshots();
+          });
+        });
+        document.getElementById('tm-search-input').addEventListener('input', e => {
+          settingsState.searchQuery = e.target.value;
+          renderTimeline();
+        });
+
+        // Scrubber slider
+        document.getElementById('tm-scrubber').addEventListener('input', e => {
+          const filtered = getFilteredSnapshots();
+          if (!filtered.length) return;
+          const pos = Number(e.target.value);
+          const idxDesc = clampIndex(filtered.length - 1 - pos, 0, filtered.length - 1);
+          selectSnapshot(filtered[idxDesc].id);
+        });
+
+        // Export buttons
+        document.getElementById('export-full-btn').addEventListener('click', () => {
+          window.location.href = '/api/backup/export?includeHistory=1';
+        });
+        document.getElementById('export-workspace-btn').addEventListener('click', () => {
+          window.location.href = '/api/backup/export?includeHistory=0';
+        });
+
+        // Import dropzone & preview
+        const dropzone = document.getElementById('import-dropzone');
+        const fileInput = document.getElementById('backup-import-file');
+        dropzone.addEventListener('click', () => fileInput.click());
+        dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('dragover'); });
+        dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+        dropzone.addEventListener('drop', e => {
+          e.preventDefault();
+          dropzone.classList.remove('dragover');
+          const file = e.dataTransfer?.files?.[0];
+          if (file) inspectBackupFile(file);
+        });
+        fileInput.addEventListener('change', e => {
+          const file = e.target.files?.[0];
+          if (file) inspectBackupFile(file);
+          e.target.value = '';
+        });
+
+        document.getElementById('cancel-import-btn').addEventListener('click', () => {
+          settingsState.pendingImportData = null;
+          document.getElementById('import-preview-card').style.display = 'none';
+        });
+
+        document.getElementById('confirm-import-btn').addEventListener('click', async () => {
+          if (!settingsState.pendingImportData) return;
+          const mode = document.querySelector('input[name="import-mode"]:checked')?.value || 'merge';
+          try {
+            const res = await apiJson('/api/backup/import', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ backup: settingsState.pendingImportData, mode })
+            });
+            try {
+              localStorage.setItem(STORAGE_KEY, JSON.stringify(res.state));
+            } catch (_) {}
+            settingsState.pendingImportData = null;
+            document.getElementById('import-preview-card').style.display = 'none';
+            showToast(`已导入 ${res.importedTasks} 个任务与 ${res.importedSnapshots} 个历史快照（导入前已自动生成保护点）`);
+            await refreshAll();
+          } catch (err) {
+            showToast(`导入失败：${err.message}`);
+          }
+        });
+
+        // Storage policy & maintenance
+        document.getElementById('refresh-storage-btn').addEventListener('click', () => refreshAll());
+        document.getElementById('save-config-btn').addEventListener('click', async () => {
+          try {
+            await apiJson('/api/backup/config', {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                autoBackupEnabled: document.getElementById('cfg-auto-enabled').checked,
+                minIntervalSec: Number(document.getElementById('cfg-min-interval').value),
+                maxAutoSnapshots: Number(document.getElementById('cfg-max-auto').value)
+              })
+            });
+            showToast('后台存储与自动快照策略已保存');
+            await loadStorageInfo();
+          } catch (err) {
+            showToast(`保存失败：${err.message}`);
+          }
+        });
+
+        document.getElementById('vacuum-db-btn').addEventListener('click', async () => {
+          try {
+            await apiJson('/api/storage/vacuum', { method: 'POST' });
+            showToast('SQLite 数据库压缩整理完成');
+            await loadStorageInfo();
+          } catch (err) {
+            showToast(`整理失败：${err.message}`);
+          }
+        });
+
+        document.getElementById('purge-auto-btn').addEventListener('click', async () => {
+          if (!window.confirm('确定清理所有自动快照吗？手动备份与安全保护点将会保留。')) return;
+          try {
+            const res = await apiJson('/api/snapshots?kind=auto', { method: 'DELETE' });
+            showToast(`已清理 ${res.deleted} 条自动快照`);
+            await refreshAll();
+          } catch (err) {
+            showToast(`清理失败：${err.message}`);
+          }
+        });
+
+        document.getElementById('clear-workspace-btn').addEventListener('click', async () => {
+          if (!window.confirm('确定清空当前工作区吗？系统会先自动保存一份「清空前自动保护」快照。')) return;
+          try {
+            await apiJson('/api/state', { method: 'DELETE' });
+            localStorage.removeItem(STORAGE_KEY);
+            showToast('工作区已清空（已保留清空前安全保护点）');
+            await refreshAll();
+          } catch (err) {
+            showToast(`清空失败：${err.message}`);
+          }
+        });
+
+        // Preferences tab
+        document.getElementById('pref-ai-mode').addEventListener('change', e => {
+          syncPrefModeUi(e.target.value);
+        });
+
+        document.getElementById('pref-llm-provider').addEventListener('change', e => {
+          if (e.target.value === 'gemini') {
+            document.getElementById('pref-llm-endpoint').value = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
+            document.getElementById('pref-llm-model').value = 'gemini-2.5-flash';
+          } else {
+            document.getElementById('pref-llm-endpoint').value = 'https://api.openai.com/v1/chat/completions';
+            document.getElementById('pref-llm-model').value = 'gpt-4o-mini';
+          }
+        });
+
+        document.getElementById('save-prefs-btn').addEventListener('click', async () => {
+          const live = settingsState.liveState || { tasks: [], manualLinks: [], clusters: [], aiLinks: [], tagCatalog: [], prefs: {} };
+          const apiKey = document.getElementById('pref-llm-key').value.trim();
+          if (apiKey) localStorage.setItem(LLM_KEY_STORAGE, apiKey);
+          else localStorage.removeItem(LLM_KEY_STORAGE);
+
+          const resolveDefaultTagSelect = (selectId, prevTags) => {
+            const val = document.getElementById(selectId)?.value ?? '';
+            if (val === '') return { tags: [], untagged: false };
+            if (val === '__untagged__') return { tags: [], untagged: true };
+            if (val === '__multi__') {
+              return { tags: Array.isArray(prevTags) ? prevTags : [], untagged: false };
+            }
+            return { tags: [val], untagged: false };
+          };
+          const defFilter = resolveDefaultTagSelect('pref-default-filter-tag', live.prefs?.defaultFilterTags);
+          const todayDefFilter = resolveDefaultTagSelect('pref-today-default-tag', live.prefs?.todayCompletedDefaultTags);
+
+          const nextPayload = {
+            ...live,
+            prefs: {
+              ...(live.prefs || {}),
+              aiMode: document.getElementById('pref-ai-mode').value,
+              aiModeUserSet: true,
+              agyModel: document.getElementById('pref-agy-model').value || 'gemini-4-hydrogen-medium',
+              llmProvider: document.getElementById('pref-llm-provider').value,
+              llmEndpoint: document.getElementById('pref-llm-endpoint').value.trim(),
+              llmModel: document.getElementById('pref-llm-model').value.trim(),
+              viewMode: document.getElementById('pref-view-mode').value,
+              showAiLinks: document.getElementById('pref-show-ai-links').checked,
+              showCompleted: document.getElementById('pref-show-completed').checked,
+              autoRotate: document.getElementById('pref-auto-rotate').checked,
+              defaultFilterTags: defFilter.tags,
+              defaultFilterUntagged: defFilter.untagged,
+              todayCompletedDefaultTags: todayDefFilter.tags,
+              todayCompletedDefaultUntagged: todayDefFilter.untagged
+            }
+          };
+
+          try {
+            await apiJson('/api/state', {
+              method: 'PUT',
+              headers: {
+                'Content-Type': 'application/json',
+                'X-MindBubble-Reason': encodeURIComponent('更新 AI 与画布偏好')
+              },
+              body: JSON.stringify(nextPayload)
+            });
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(nextPayload));
+            showToast('AI 与画布偏好设置已保存并同步');
+            await refreshAll();
+          } catch (err) {
+            showToast(`保存失败：${err.message}`);
+          }
+        });
+      }
+
+      async function inspectBackupFile(file) {
+        try {
+          const text = await file.text();
+          const parsed = JSON.parse(text);
+          let formatLabel = '';
+          let wsState = null;
+          let snapCount = 0;
+
+          if (parsed?.format === 'mindbubble-backup' && parsed.currentState && Array.isArray(parsed.currentState.tasks)) {
+            formatLabel = parsed.mode === 'snapshot' ? 'v2 单快照备份' : 'v2 完整时光机备份';
+            wsState = parsed.currentState;
+            snapCount = Array.isArray(parsed.snapshots) ? parsed.snapshots.length : 0;
+          } else if (Array.isArray(parsed?.tasks)) {
+            formatLabel = 'v1 工作区 JSON';
+            wsState = parsed;
+            snapCount = 0;
+          } else {
+            throw new Error('未识别的备份文件结构');
+          }
+
+          settingsState.pendingImportData = parsed;
+          document.getElementById('import-file-name').textContent = `已选择：${file.name}`;
+          document.getElementById('import-summary-title').textContent = file.name;
+          document.getElementById('import-format-badge').textContent = formatLabel;
+
+          const tasks = wsState.tasks || [];
+          const links = wsState.manualLinks || [];
+          const clusters = wsState.clusters || [];
+          document.getElementById('import-meta-chips').innerHTML = `
+            <span class="diff-chip add">${tasks.length} 个任务气泡</span>
+            <span class="diff-chip">${links.length} 条手动连线</span>
+            <span class="diff-chip">${clusters.length} 个 AI 星群</span>
+            <span class="diff-chip mod">${snapCount} 个历史快照</span>
+            ${parsed.exportedAt ? `<span class="diff-chip">导出时间：${formatTime(parsed.exportedAt)}</span>` : ''}
+          `;
+          document.getElementById('import-preview-card').style.display = 'flex';
+        } catch (err) {
+          showToast(`无法解析备份文件：${err.message}`);
+        }
+      }
+
+      function clampIndex(v, lo, hi) {
+        return Math.max(lo, Math.min(hi, v));
+      }
+
+      // ---------- Boot ----------
+      bindEvents();
+      const hashTab = (window.location.hash || '').replace('#', '');
+      if (['timemachine', 'backup', 'storage', 'prefs'].includes(hashTab)) {
+        document.querySelector(`.nav-btn[data-tab="${hashTab}"]`)?.click();
+      }
+      refreshAll().catch(err => {
+        document.getElementById('header-status-pill').textContent = `连接失败：${err.message}`;
+        showToast(`无法连接后台服务：${err.message}`);
+      });
+    })();
+  </script>
+</body>
+</html>

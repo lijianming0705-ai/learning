@@ -37,7 +37,7 @@ interface RemarksPanelProps {
   onUpdateHighlight: (id: string, patch: { color?: HighlightColor; note_text?: string }) => Promise<void>;
   onDeleteHighlight: (id: string) => Promise<void>;
   onAskHighlight: (highlightId: string, question: string, useRag: boolean, crossNotebook: boolean) => Promise<void>;
-  onOcrHighlight: (highlightId: string) => Promise<void>;
+  onOcrHighlight: (highlightId: string, engine?: 'local' | 'agy') => Promise<void>;
   onJumpToMemory: (mem: RagMemoryRef) => void;
 }
 
@@ -329,26 +329,42 @@ export function RemarksPanel({
                           </button>
                         </div>
 
-                        <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
                           <span className="text-[11px] text-[#5E5B53]">
                             {hl.quote_text ? '已提取 OCR 文本（已同步 RAG）' : '截图将随提问自动发送给 AI 识别'}
                           </span>
-                          <button
-                            type="button"
-                            disabled={Boolean(ocrLoadingMap[hl.id])}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              void onOcrHighlight(hl.id);
-                            }}
-                            className="inline-flex items-center gap-1 px-2 py-1 rounded-md border border-[#E5E0D5] bg-[#FAF8F4] hover:border-[#B45309] text-[11px] font-medium text-[#1C1B18] cursor-pointer disabled:opacity-50"
-                          >
-                            {ocrLoadingMap[hl.id] ? (
-                              <Loader2 className="w-3 h-3 animate-spin text-[#B45309]" />
-                            ) : (
-                              <ScanText className="w-3 h-3 text-[#B45309]" />
-                            )}
-                            <span>{ocrLoadingMap[hl.id] ? 'OCR 识别中...' : hl.quote_text ? '重新 OCR' : 'OCR 识别文字'}</span>
-                          </button>
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              disabled={Boolean(ocrLoadingMap[hl.id])}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void onOcrHighlight(hl.id, 'local');
+                              }}
+                              className="inline-flex items-center gap-1 px-2 py-1 rounded-md border border-[#E5E0D5] bg-[#FAF8F4] hover:border-[#B45309] text-[11px] font-medium text-[#1C1B18] cursor-pointer disabled:opacity-50"
+                              title="使用 Apple Vision 本地高速识别"
+                            >
+                              {ocrLoadingMap[hl.id] ? (
+                                <Loader2 className="w-3 h-3 animate-spin text-[#B45309]" />
+                              ) : (
+                                <ScanText className="w-3 h-3 text-[#B45309]" />
+                              )}
+                              <span>{ocrLoadingMap[hl.id] ? 'OCR 识别中...' : hl.quote_text ? '重新 OCR' : 'OCR 识别文字'}</span>
+                            </button>
+                            <button
+                              type="button"
+                              disabled={Boolean(ocrLoadingMap[hl.id])}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void onOcrHighlight(hl.id, 'agy');
+                              }}
+                              className="inline-flex items-center gap-1 px-2 py-1 rounded-md border border-[#E5E0D5] bg-white hover:border-[#B45309] text-[11px] font-medium text-[#5E5B53] hover:text-[#B45309] cursor-pointer disabled:opacity-50"
+                              title="使用 agy 视觉大模型深度识别公式/图表"
+                            >
+                              <Sparkles className="w-3 h-3 text-[#B45309]" />
+                              <span>AI 深度识别</span>
+                            </button>
+                          </div>
                         </div>
                       </div>
                     )}

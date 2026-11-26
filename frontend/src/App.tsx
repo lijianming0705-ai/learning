@@ -18,7 +18,7 @@ import {
   Volume2,
   X,
 } from 'lucide-react';
-import { api, streamHighlightAsk, streamNotebookChat } from './api/client';
+import { api, streamGenerateSpeechScript, streamHighlightAsk, streamNotebookChat } from './api/client';
 import { DocumentViewer } from './components/DocumentViewer';
 import { Header } from './components/Header';
 import { NotebookChatPanel } from './components/NotebookChatPanel';
@@ -31,7 +31,7 @@ import { RemarksPanel } from './components/RemarksPanel';
 import { SelectionPopover, type SelectionPopoverAction } from './components/SelectionPopover';
 import { SettingsModal } from './components/SettingsModal';
 import { SourceSidebar } from './components/SourceSidebar';
-import { SpeechPanel } from './components/SpeechPanel';
+import { SpeechPanel, type SpeechGenerationProgress } from './components/SpeechPanel';
 import { useReadingTracker } from './hooks/useReadingTracker';
 import { computeReadingProgress } from './utils/formatDuration';
 import type {
@@ -111,7 +111,9 @@ export default function App() {
   // Speech & natural reading state
   const [speechSegments, setSpeechSegments] = useState<SpeechSegment[]>([]);
   const [speechGenerating, setSpeechGenerating] = useState(false);
+  const [speechProgress, setSpeechProgress] = useState<SpeechGenerationProgress | null>(null);
   const [activeSegmentIndex, setActiveSegmentIndex] = useState<number | null>(null);
+  const [loadingSegmentIndex, setLoadingSegmentIndex] = useState<number | null>(null);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [speechRate, setSpeechRate] = useState<number>(1.0);
   const [autoSyncPage, setAutoSyncPage] = useState<boolean>(true);
@@ -295,6 +297,7 @@ export default function App() {
     }
     setIsSpeaking(false);
     setSelectionAudioPlaying(false);
+    setLoadingSegmentIndex(null);
   };
 
   useEffect(() => {
@@ -363,27 +366,39 @@ export default function App() {
     fallbackText: string,
     fallbackLang: string,
     mode: 'selection' | 'segment',
+    segmentIndex?: number,
   ) => {
     stopAllAudio();
     playModeRef.current = mode;
-    if (mode === 'segment') setIsSpeaking(true);
-    else setSelectionAudioPlaying(true);
+    if (mode === 'segment') {
+      setIsSpeaking(true);
+      if (segmentIndex !== undefined) setLoadingSegmentIndex(segmentIndex);
+    } else {
+      setSelectionAudioPlaying(true);
+    }
 
     if (audioUrl && audioRef.current) {
       try {
         audioRef.current.src = audioUrl;
         audioRef.current.playbackRate = speechRate;
+        audioRef.current.onplaying = () => {
+          setLoadingSegmentIndex(null);
+        };
         audioRef.current.onerror = () => {
+          setLoadingSegmentIndex(null);
           if (playModeRef.current === mode) {
             speakViaBrowserTts(fallbackText, fallbackLang, mode);
           }
         };
         await audioRef.current.play();
+        setLoadingSegmentIndex(null);
         return;
       } catch {
+        setLoadingSegmentIndex(null);
         // fallback to Web Speech API
       }
     }
+    setLoadingSegmentIndex(null);
     speakViaBrowserTts(fallbackText, fallbackLang, mode);
   };
 
@@ -403,7 +418,7 @@ export default function App() {
     if (nextSeg?.audio_url) {
       fetch(nextSeg.audio_url).catch(() => {});
     }
-    await playAudioUrlOrFallback(seg.audio_url, seg.spoken_text, seg.language, 'segment');
+    await playAudioUrlOrFallback(seg.audio_url, seg.spoken_text, seg.language, 'segment', index);
   };
 
   onSegmentEndedRef.current = () => {
@@ -453,21 +468,79 @@ export default function App() {
     setActiveSegmentIndex(null);
   };
 
+  const handleUpdateTtsSettings = async (patch: {
+    tts_engine?: 'mlx-audio' | 'edge-tts' | 'macos-say';
+    mlx_tts_voice?: string;
+  }) => {
+    setSettings((prev) => ({ ...prev, ...patch }));
+    try {
+      const updated = await api.updateSettings(patch);
+      setSettings(updated);
+      refreshSystem(false).catch(() => {});
+    } catch (err) {
+      showError(err instanceof Error ? err.message : '更新语音设置失败');
+    }
+  };
+
   const handleGenerateSpeechScript = async (forceRegenerate = false): Promise<SpeechSegment[]> => {
     if (!activeSource) return [];
     setSpeechGenerating(true);
+    setSpeechProgress({
+      percent: 0,
+      completedBatches: 0,
+      totalBatches: 0,
+      segmentsSoFar: 0,
+      label: '正在准备全文自然朗读...',
+    });
+    let finalSegments: SpeechSegment[] = [];
     try {
-      const res = await api.generateSpeechScript(activeSource.id, selectedModel, forceRegenerate);
-      setSpeechSegments(res.segments);
-      if (forceRegenerate) {
-        handleStopSpeechPlayback();
-      }
-      return res.segments;
+      await streamGenerateSpeechScript(
+        activeSource.id,
+        { model: selectedModel, force_regenerate: forceRegenerate },
+        {
+          onStart: ({ total_pages }) => {
+            setSpeechProgress({
+              percent: 5,
+              completedBatches: 0,
+              totalBatches: 0,
+              segmentsSoFar: 0,
+              label: `已读取 ${total_pages} 页内容，开始整理...`,
+            });
+          },
+          onProgress: (evt) => {
+            const label =
+              evt.stage === 'cached'
+                ? `已加载缓存（共 ${evt.segments_so_far} 段）`
+                : evt.stage === 'batch_start'
+                  ? `第 ${evt.batch_index}/${evt.total_batches} 批（P.${evt.page_start}–${evt.page_end}）`
+                  : `已完成 ${evt.completed_batches}/${evt.total_batches} 批 · 已生成 ${evt.segments_so_far} 段`;
+            setSpeechProgress({
+              percent: Math.max(5, evt.percent),
+              completedBatches: evt.completed_batches,
+              totalBatches: evt.total_batches,
+              segmentsSoFar: evt.segments_so_far,
+              label,
+            });
+          },
+          onDone: (res) => {
+            finalSegments = res.segments;
+            setSpeechSegments(res.segments);
+            if (forceRegenerate) {
+              handleStopSpeechPlayback();
+            }
+          },
+          onError: (msg) => {
+            showError(msg);
+          },
+        },
+      );
+      return finalSegments;
     } catch (err) {
       showError(err instanceof Error ? err.message : '生成全文自然朗读脚本失败');
       return [];
     } finally {
       setSpeechGenerating(false);
+      setSpeechProgress(null);
     }
   };
 
@@ -706,10 +779,10 @@ export default function App() {
   const QUICK_TRANSLATE_PROMPT =
     '请将这段内容翻译成自然流畅的中文，并拆解解释其中的核心词汇、专业术语、固定搭配与关键语义。';
 
-  const handleOcrHighlight = async (highlightId: string) => {
+  const handleOcrHighlight = async (highlightId: string, engine: 'local' | 'agy' = 'local') => {
     setOcrLoadingMap((prev) => ({ ...prev, [highlightId]: true }));
     try {
-      const updated = await api.ocrHighlight(highlightId, selectedModel);
+      const updated = await api.ocrHighlight(highlightId, selectedModel, engine);
       setHighlights((prev) => prev.map((h) => (h.id === highlightId ? updated : h)));
       refreshSystem().catch(() => {});
     } catch (err) {
@@ -1484,16 +1557,20 @@ export default function App() {
                       sourceTitle={activeSource?.title || ''}
                       segments={speechSegments}
                       generating={speechGenerating}
+                      generationProgress={speechProgress}
                       activeSegmentIndex={activeSegmentIndex}
+                      loadingSegmentIndex={loadingSegmentIndex}
                       isPlaying={isSpeaking}
                       speechRate={speechRate}
                       autoSyncPage={autoSyncPage}
-                      models={models}
-                      selectedModel={selectedModel}
+                      ttsEngine={settings.tts_engine || 'mlx-audio'}
+                      mlxVoice={settings.mlx_tts_voice || 'Vivian'}
                       selectionSpeech={selectionSpeech}
                       selectionSpeechLoading={selectionSpeechLoading}
                       selectionPlaying={selectionAudioPlaying}
-                      onSelectModel={handleSelectModel}
+                      onChangeTtsSettings={(patch) => {
+                        void handleUpdateTtsSettings(patch);
+                      }}
                       onGenerateScript={(force) => {
                         void handleGenerateSpeechScript(Boolean(force));
                       }}
@@ -1697,6 +1774,7 @@ export default function App() {
           target={ocrConvertTarget}
           models={models}
           selectedModel={selectedModel}
+          localOcrAvailable={health?.local_ocr_available ?? true}
           onSelectModel={handleSelectModel}
           onConverted={async (newSource) => {
             if (activeNotebook) {

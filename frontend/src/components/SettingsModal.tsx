@@ -11,6 +11,18 @@ interface SettingsModalProps {
   onClose: () => void;
 }
 
+const MLX_VOICE_OPTIONS = [
+  { id: 'Vivian', label: 'Vivian（默认 · 自然女声）' },
+  { id: 'Serena', label: 'Serena（温柔女声）' },
+  { id: 'Ryan', label: 'Ryan（清晰男声）' },
+  { id: 'Uncle_Fu', label: 'Uncle_Fu（沉稳男声）' },
+  { id: 'Aiden', label: 'Aiden（年轻男声）' },
+  { id: 'Eric', label: 'Eric（自然男声）' },
+  { id: 'Dylan', label: 'Dylan（朗读男声）' },
+  { id: 'Ono_Anna', label: 'Ono_Anna（日系女声）' },
+  { id: 'Sohee', label: 'Sohee（韩系女声）' },
+];
+
 export function SettingsModal({
   settings,
   models,
@@ -26,6 +38,10 @@ export function SettingsModal({
     settings.embedding_provider,
   );
   const [ollamaModel, setOllamaModel] = useState(settings.ollama_embedding_model);
+  const [ttsEngine, setTtsEngine] = useState<'mlx-audio' | 'edge-tts' | 'macos-say'>(
+    settings.tts_engine || 'mlx-audio',
+  );
+  const [mlxVoice, setMlxVoice] = useState(settings.mlx_tts_voice || 'Vivian');
   const [saving, setSaving] = useState(false);
   const [reindexing, setReindexing] = useState(false);
 
@@ -38,6 +54,8 @@ export function SettingsModal({
         cross_notebook_rag: crossNotebook,
         embedding_provider: embeddingProvider,
         ollama_embedding_model: ollamaModel.trim(),
+        tts_engine: ttsEngine,
+        mlx_tts_voice: mlxVoice,
       });
       onClose();
     } finally {
@@ -133,6 +151,38 @@ export function SettingsModal({
               />
             </div>
           )}
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-[#5E5B53] mb-1">语音合成引擎 (TTS)</label>
+              <select
+                value={ttsEngine}
+                onChange={(e) => setTtsEngine(e.target.value as 'mlx-audio' | 'edge-tts' | 'macos-say')}
+                className="w-full rounded-lg border border-[#E5E0D5] px-3 py-2 bg-[#FAF8F4] text-sm"
+              >
+                <option value="mlx-audio">MLX-Audio 本地神经网络（默认）</option>
+                <option value="edge-tts">Edge TTS（微软在线）</option>
+                <option value="macos-say">macOS 系统自带 say</option>
+              </select>
+            </div>
+
+            {ttsEngine === 'mlx-audio' && (
+              <div>
+                <label className="block text-xs font-medium text-[#5E5B53] mb-1">MLX-Audio 预设音色</label>
+                <select
+                  value={mlxVoice}
+                  onChange={(e) => setMlxVoice(e.target.value)}
+                  className="w-full rounded-lg border border-[#E5E0D5] px-3 py-2 bg-[#FAF8F4] text-sm"
+                >
+                  {MLX_VOICE_OPTIONS.map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
 
           <div className="rounded-xl bg-[#FAF8F4] border border-[#E5E0D5] p-3.5 flex items-center justify-between">
             <div className="text-xs text-[#5E5B53] space-y-0.5">

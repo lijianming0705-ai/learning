@@ -5,7 +5,9 @@ from fastapi import APIRouter
 from app.rag.store import rag_store
 from app.schemas import AgyModelOut, HealthOut, SettingsOut, SettingsUpdate
 from app.services.agy_service import agy_service
+from app.services.ocr_service import ocr_service
 from app.services.study_service import get_settings, update_settings
+from app.services.tts_service import tts_service
 
 router = APIRouter(prefix="/api", tags=["system"])
 
@@ -19,6 +21,10 @@ async def health() -> HealthOut:
         agy_path=agy_service.agy_path(),
         agy_warm_workers=agy_service.warm_worker_count(),
         rag_documents=stats["total_documents"],
+        local_ocr_available=ocr_service.is_available(),
+        local_ocr_engine=ocr_service.engine_name(),
+        local_tts_available=tts_service.is_available(),
+        local_tts_engine=tts_service.engine_name(),
     )
 
 
