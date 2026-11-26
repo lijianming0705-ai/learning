@@ -441,6 +441,8 @@ TOOL_SPECS: list[dict[str, Any]] = [
                 "galaxy": {"type": "string"},
                 "cluster_id": {"type": ["string", "null"]},
                 "top3_slot": {"type": ["integer", "null"], "description": "0/1/2，传 null 可取消置顶"},
+                "notebook": {"type": "string", "description": "覆盖更新气泡 Markdown 笔记本内容"},
+                "append_notebook": {"type": "string", "description": "向气泡笔记本末尾追加一段 Markdown 记录"},
             },
             "required": ["task_id"],
             "additionalProperties": False,
@@ -689,6 +691,10 @@ class MindBubbleMcpService:
         g = galaxy_map.get(gid) or DEFAULT_GALAXY
         cid = t.get("clusterId")
         cl = cluster_map.get(cid) if cid else None
+        nb = t.get("notebook") or ""
+        cl_list = [c for c in (t.get("checklist") or []) if isinstance(c, dict)]
+        ai_hist = [m for m in (t.get("aiHistory") or []) if isinstance(m, dict)]
+        act_log = [a for a in (t.get("activityLog") or []) if isinstance(a, dict)]
         return {
             "id": t.get("id"),
             "title": t.get("title") or "",
@@ -707,6 +713,11 @@ class MindBubbleMcpService:
             "dueAtStr": _format_local_ts(t.get("dueAt")),
             "createdAt": t.get("createdAt"),
             "createdAtStr": _format_local_ts(t.get("createdAt")),
+            "notebookChars": len(nb) if isinstance(nb, str) else 0,
+            "checklistTotal": len(cl_list),
+            "checklistDone": sum(1 for c in cl_list if c.get("done")),
+            "aiMessageCount": len(ai_hist),
+            "activityCount": len(act_log),
         }
 
     # ---------- Tools ----------
@@ -935,10 +946,15 @@ class MindBubbleMcpService:
                     "peerTitle": other.get("title"),
                     "label": l.get("label") or "",
                 })
+        formatted = self._format_task(found, galaxy_map, cluster_map)
+        formatted["notebook"] = str(found.get("notebook") or "")
+        formatted["checklist"] = list(found.get("checklist") or [])
+        formatted["aiHistory"] = list(found.get("aiHistory") or [])
+        formatted["activityLog"] = list(found.get("activityLog") or [])
         return {
             "revision": rev,
             "transportSource": self.backend.last_source,
-            "task": self._format_task(found, galaxy_map, cluster_map),
+            "task": formatted,
             "links": links,
         }
 
@@ -1033,6 +1049,17 @@ class MindBubbleMcpService:
             "z": z,
             "floatSeed": round(0.1 + seed * 0.85, 6),
             "createdAt": _now_ms(),
+            "notebook": "",
+            "checklist": [],
+            "aiHistory": [],
+            "activityLog": [
+                {
+                    "id": _uid("act"),
+                    "type": "create",
+                    "text": f"创建气泡「{clean_title[:40]}」",
+                    "createdAt": _now_ms(),
+                }
+            ],
         }
         state["tasks"].append(new_task)
 
@@ -1068,6 +1095,8 @@ class MindBubbleMcpService:
         galaxy: str | None = None,
         cluster_id: str | None = "__UNSET__",
         top3_slot: int | None = -999,
+        notebook: str | None = None,
+        append_notebook: str | None = None,
     ) -> dict[str, Any]:
         state, _, _ = self._load_bundle()
         task = next((t for t in state["tasks"] if t.get("id") == task_id), None)
@@ -1106,6 +1135,18 @@ class MindBubbleMcpService:
                     if other.get("id") != task["id"] and (other.get("galaxyId") or DEFAULT_GALAXY_ID) == gid and other.get("top3Slot") == top3_slot:
                         other["top3Slot"] = None
                 task["top3Slot"] = top3_slot
+        if notebook is not None:
+            task["notebook"] = str(notebook)[:100_000]
+            log = list(task.get("activityLog") or [])
+            log.append({"id": _uid("act"), "type": "notebook_edit", "text": "MCP 更新笔记本内容", "createdAt": _now_ms()})
+            task["activityLog"] = log[-150:]
+        if isinstance(append_notebook, str) and append_notebook.strip():
+            prev_nb = str(task.get("notebook") or "")
+            sep = "\n\n" if prev_nb.strip() else ""
+            task["notebook"] = (prev_nb + sep + append_notebook.strip())[:100_000]
+            log = list(task.get("activityLog") or [])
+            log.append({"id": _uid("act"), "type": "notebook_edit", "text": "MCP 追加笔记本记录", "createdAt": _now_ms()})
+            task["activityLog"] = log[-150:]
 
         saved = self._save_state(state, reason=f"MCP 更新「{str(task.get('title') or '')[:14]}」")
         galaxy_map = {g["id"]: g for g in state["galaxies"]}

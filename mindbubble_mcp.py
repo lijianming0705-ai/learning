@@ -150,6 +150,8 @@ def create_fastmcp_app(service: MindBubbleMcpService, *, host: str = "127.0.0.1"
         clear_cluster: bool = False,
         top3_slot: int | None = None,
         clear_top3: bool = False,
+        notebook: str | None = None,
+        append_notebook: str | None = None,
     ) -> dict[str, Any]:
         resolved_due: Any = None if clear_due_at else (due_at if due_at is not None else "__UNSET__")
         resolved_cluster: Any = None if clear_cluster else (cluster_id if cluster_id is not None else "__UNSET__")
@@ -164,6 +166,8 @@ def create_fastmcp_app(service: MindBubbleMcpService, *, host: str = "127.0.0.1"
             galaxy=galaxy,
             cluster_id=resolved_cluster,
             top3_slot=resolved_top3,
+            notebook=notebook,
+            append_notebook=append_notebook,
         )
 
     @mcp.tool(name="complete_task", description=_desc("complete_task"), annotations=_ann("complete_task"))

@@ -172,6 +172,86 @@ def _sanitize_galaxies(raw_galaxies: Any, fallback_prefs_galaxies: Any = None) -
     return result
 
 
+def _sanitize_bubble_workspace_fields(nt: dict[str, Any]) -> None:
+    """Normalize per-bubble persistent notebook, checklist, AI history, and activity log."""
+    raw_nb = nt.get("notebook")
+    nt["notebook"] = str(raw_nb)[:100_000] if isinstance(raw_nb, str) else ""
+
+    clean_cl: list[dict[str, Any]] = []
+    raw_cl = nt.get("checklist")
+    if isinstance(raw_cl, list):
+        for item in raw_cl[:200]:
+            if not isinstance(item, dict):
+                continue
+            txt = str(item.get("text") or "").strip()[:300]
+            if not txt:
+                continue
+            done = bool(item.get("done"))
+            raw_cat = item.get("createdAt")
+            created_at = int(raw_cat) if isinstance(raw_cat, (int, float)) and not isinstance(raw_cat, bool) and raw_cat > 0 else 0
+            raw_comp = item.get("completedAt")
+            comp_at = (
+                int(raw_comp)
+                if done and isinstance(raw_comp, (int, float)) and not isinstance(raw_comp, bool) and raw_comp > 0
+                else None
+            )
+            clean_cl.append({
+                "id": str(item.get("id") or f"chk_{len(clean_cl)+1}")[:64],
+                "text": txt,
+                "done": done,
+                "createdAt": created_at,
+                "completedAt": comp_at,
+            })
+    nt["checklist"] = clean_cl
+
+    clean_ai: list[dict[str, Any]] = []
+    raw_ai = nt.get("aiHistory")
+    if isinstance(raw_ai, list):
+        for msg in raw_ai[-80:]:
+            if not isinstance(msg, dict):
+                continue
+            role = "assistant" if msg.get("role") == "assistant" else "user"
+            content = str(msg.get("content") or "").strip()[:20_000]
+            if not content:
+                continue
+            raw_cat = msg.get("createdAt")
+            created_at = int(raw_cat) if isinstance(raw_cat, (int, float)) and not isinstance(raw_cat, bool) and raw_cat > 0 else 0
+            steps = [
+                str(s).strip()[:200]
+                for s in (msg.get("suggestedSteps") or [])[:12]
+                if isinstance(s, str) and str(s).strip()
+            ]
+            clean_ai.append({
+                "id": str(msg.get("id") or f"ai_{len(clean_ai)+1}")[:64],
+                "role": role,
+                "content": content,
+                "createdAt": created_at,
+                "model": str(msg.get("model") or "")[:80],
+                "engine": str(msg.get("engine") or "")[:32],
+                "suggestedSteps": steps,
+            })
+    nt["aiHistory"] = clean_ai
+
+    clean_log: list[dict[str, Any]] = []
+    raw_log = nt.get("activityLog")
+    if isinstance(raw_log, list):
+        for entry in raw_log[-150:]:
+            if not isinstance(entry, dict):
+                continue
+            txt = str(entry.get("text") or "").strip()[:300]
+            if not txt:
+                continue
+            raw_cat = entry.get("createdAt")
+            created_at = int(raw_cat) if isinstance(raw_cat, (int, float)) and not isinstance(raw_cat, bool) and raw_cat > 0 else 0
+            clean_log.append({
+                "id": str(entry.get("id") or f"act_{len(clean_log)+1}")[:64],
+                "type": str(entry.get("type") or "event")[:40],
+                "text": txt,
+                "createdAt": created_at,
+            })
+    nt["activityLog"] = clean_log
+
+
 def sanitize_state(data: Any) -> dict[str, Any]:
     """Validate and normalize incoming workspace JSON payload."""
     if not isinstance(data, dict) or not isinstance(data.get("tasks"), list):
@@ -202,6 +282,7 @@ def sanitize_state(data: Any) -> dict[str, Any]:
                     nt["completedAt"] = None
             else:
                 nt["completedAt"] = None
+            _sanitize_bubble_workspace_fields(nt)
             tasks.append(nt)
         else:
             tasks.append(t)
@@ -246,6 +327,10 @@ def compute_counts(state: dict[str, Any]) -> tuple[int, int, int, int]:
 
 
 def _task_signature(t: dict[str, Any]) -> tuple[Any, ...]:
+    nb = t.get("notebook") or ""
+    cl = tuple((c.get("id"), c.get("text"), bool(c.get("done"))) for c in (t.get("checklist") or []) if isinstance(c, dict))
+    ai_hist = t.get("aiHistory") or []
+    act_log = t.get("activityLog") or []
     return (
         t.get("title"),
         t.get("notes"),
@@ -257,6 +342,12 @@ def _task_signature(t: dict[str, Any]) -> tuple[Any, ...]:
         t.get("clusterId"),
         t.get("galaxyId"),
         t.get("dueAt"),
+        hashlib.sha1(str(nb).encode("utf-8", errors="ignore")).hexdigest(),
+        cl,
+        len(ai_hist),
+        ai_hist[-1].get("id") if ai_hist and isinstance(ai_hist[-1], dict) else None,
+        len(act_log),
+        act_log[-1].get("id") if act_log and isinstance(act_log[-1], dict) else None,
     )
 
 
@@ -1639,6 +1730,115 @@ class AgyClient:
             "elapsedMs": int((time.monotonic() - started) * 1000),
         }
 
+    def bubble_chat(
+        self,
+        task_context: Any,
+        messages: Any = None,
+        question: str = "",
+        model: str | None = None,
+    ) -> dict[str, Any]:
+        if not isinstance(task_context, dict):
+            raise ValueError("taskContext must be a JSON object")
+        clean_question = str(question or "").strip()
+        if not clean_question:
+            raise ValueError("question must not be empty")
+
+        chosen_model = (model or "").strip() or DEFAULT_AGY_MODEL
+        compact_cl = []
+        for item in (task_context.get("checklist") or [])[:40]:
+            if isinstance(item, dict) and item.get("text"):
+                compact_cl.append({"text": str(item["text"])[:160], "done": bool(item.get("done"))})
+        compact_links = []
+        for lk in (task_context.get("linkedTasks") or [])[:20]:
+            if isinstance(lk, dict) and lk.get("title"):
+                compact_links.append({
+                    "title": str(lk["title"])[:100],
+                    "completed": bool(lk.get("completed")),
+                    "label": str(lk.get("label") or "")[:40],
+                })
+        compact_ctx = {
+            "title": str(task_context.get("title") or "")[:160],
+            "galaxyName": str(task_context.get("galaxyName") or "默认星系")[:40],
+            "clusterName": str(task_context.get("clusterName") or "")[:60],
+            "priority": str(task_context.get("priority") or "normal"),
+            "completed": bool(task_context.get("completed")),
+            "dueAtStr": str(task_context.get("dueAtStr") or "")[:32],
+            "tags": [str(x)[:24] for x in (task_context.get("tags") or [])[:8]],
+            "notes": str(task_context.get("notes") or "")[:1000],
+            "notebook": str(task_context.get("notebook") or "")[:6000],
+            "checklist": compact_cl,
+            "linkedTasks": compact_links,
+        }
+        compact_msgs = []
+        if isinstance(messages, list):
+            for m in messages[-12:]:
+                if isinstance(m, dict) and m.get("content"):
+                    compact_msgs.append({
+                        "role": "assistant" if m.get("role") == "assistant" else "user",
+                        "content": str(m["content"])[:1500],
+                    })
+
+        prompt = (
+            "你是 MindBubble 气泡工作舱的专属 AI 助手。不要调用任何工具，也不要读取任何文件，只结合下方任务上下文与近期对话回答用户问题。\n"
+            "请尽量输出清晰、可直接落地的中文 Markdown，并优先输出合法 JSON："
+            '{"reply":"Markdown 格式回答正文","suggestedSteps":["可选可添加到子任务清单的具体行动步1","行动步2"]}\n'
+            f"任务上下文：{json.dumps(compact_ctx, ensure_ascii=False)}\n"
+            f"历史对话：{json.dumps(compact_msgs, ensure_ascii=False)}\n"
+            f"用户问题：{clean_question[:3000]}"
+        )
+
+        started = time.monotonic()
+        raw_text = self._ask_with_retry(prompt, chosen_model).strip()
+        reply_text = raw_text
+        suggested_steps: list[str] = []
+
+        cleaned = raw_text
+        if cleaned.startswith("```json"):
+            cleaned = cleaned[7:]
+        elif cleaned.startswith("```"):
+            cleaned = cleaned[3:]
+        if cleaned.endswith("```"):
+            cleaned = cleaned[:-3]
+        cleaned = cleaned.strip()
+
+        match = re.search(r"\{[\s\S]*\}", cleaned)
+        parsed_ok = False
+        if match:
+            try:
+                parsed = json.loads(match.group(0))
+                if isinstance(parsed, dict) and isinstance(parsed.get("reply"), str) and parsed["reply"].strip():
+                    reply_text = parsed["reply"].strip()[:20_000]
+                    raw_steps = parsed.get("suggestedSteps")
+                    if isinstance(raw_steps, list):
+                        for st in raw_steps[:12]:
+                            s = str(st or "").strip()[:200]
+                            if s:
+                                suggested_steps.append(s)
+                    parsed_ok = True
+            except Exception:
+                pass
+
+        if not parsed_ok:
+            reply_text = raw_text[:20_000]
+            for line in reply_text.splitlines():
+                m_line = re.match(r"^\s*(?:[-*•]|\d+[.)、])\s+(?:\[[ xX]\]\s+)?(.+)$", line)
+                if m_line:
+                    step = m_line.group(1).strip()[:200]
+                    if step and len(suggested_steps) < 8:
+                        suggested_steps.append(step)
+
+        if not reply_text:
+            raise RuntimeError("AGY 未返回有效回复内容")
+
+        return {
+            "ok": True,
+            "engine": "agy",
+            "model": chosen_model,
+            "reply": reply_text,
+            "suggestedSteps": suggested_steps,
+            "elapsedMs": int((time.monotonic() - started) * 1000),
+        }
+
     def close(self) -> None:
         with self._pool_lock:
             if self._worker:
@@ -2555,6 +2755,26 @@ def make_handler(
                         manual_links=payload.get("manualLinks"),
                         ai_links=payload.get("aiLinks"),
                         target_task_id=payload.get("targetTaskId"),
+                        model=payload.get("model"),
+                    )
+                    self._send_json(HTTPStatus.OK, res)
+                except ValueError as exc:
+                    self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "error": str(exc)})
+                except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+                    self._send_json(HTTPStatus.BAD_REQUEST, {"ok": False, "error": str(exc)})
+                except Exception as exc:
+                    self._send_json(HTTPStatus.BAD_GATEWAY, {"ok": False, "error": str(exc)})
+                return
+
+            if path == "/api/ai/bubble-chat":
+                try:
+                    payload = self._read_json_body()
+                    if not isinstance(payload, dict):
+                        raise ValueError("Payload must be a JSON object")
+                    res = agy_client.bubble_chat(
+                        task_context=payload.get("taskContext"),
+                        messages=payload.get("messages"),
+                        question=str(payload.get("question") or ""),
                         model=payload.get("model"),
                     )
                     self._send_json(HTTPStatus.OK, res)

@@ -3906,6 +3906,478 @@
       color: #fda4af;
     }
 
+    /* Bubble Studio Independent Floating Window (Dblclick Bubble) */
+    .bubble-studio-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 65;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      background: rgba(2, 6, 23, 0.56);
+      backdrop-filter: blur(7px);
+      padding: 16px;
+    }
+
+    .bubble-studio-backdrop.open {
+      display: flex;
+    }
+
+    .bubble-studio-window {
+      position: relative;
+      width: min(1140px, 92vw);
+      height: min(780px, 88vh);
+      min-width: 680px;
+      min-height: 460px;
+      max-width: 97vw;
+      max-height: 94vh;
+      resize: both;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      border-radius: 20px;
+      background: linear-gradient(160deg, rgba(13, 21, 42, 0.94), rgba(8, 14, 29, 0.96));
+      border: 1px solid rgba(125, 211, 252, 0.34);
+      box-shadow: 0 28px 80px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+      color: #f1f5f9;
+    }
+
+    .bubble-studio-window.maximized {
+      position: fixed !important;
+      left: 2vw !important;
+      top: 4vh !important;
+      width: 96vw !important;
+      height: 92vh !important;
+      resize: none;
+    }
+
+    .bsw-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px 16px;
+      border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+      background: rgba(15, 23, 42, 0.65);
+      cursor: grab;
+      user-select: none;
+      flex-shrink: 0;
+    }
+
+    .bsw-header:active {
+      cursor: grabbing;
+    }
+
+    .bsw-header-left {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      flex: 1;
+      min-width: 0;
+      flex-wrap: wrap;
+    }
+
+    .bsw-color-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      box-shadow: 0 0 12px currentColor;
+    }
+
+    .bsw-title-input {
+      flex: 1 1 220px;
+      min-width: 150px;
+      background: rgba(15, 23, 42, 0.55);
+      border: 1px solid rgba(148, 163, 184, 0.22);
+      border-radius: 9px;
+      padding: 6px 10px;
+      color: #f8fafc;
+      font-size: 14.5px;
+      font-weight: 700;
+      font-family: inherit;
+      outline: none;
+    }
+
+    .bsw-title-input:focus {
+      border-color: rgba(56, 189, 248, 0.65);
+      background: rgba(15, 23, 42, 0.85);
+    }
+
+    .bsw-meta-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 9px;
+      border-radius: 999px;
+      font-size: 11.5px;
+      border: 1px solid rgba(148, 163, 184, 0.24);
+      background: rgba(15, 23, 42, 0.65);
+      color: #cbd5e1;
+      white-space: nowrap;
+    }
+
+    .bsw-meta-pill.done {
+      border-color: rgba(52, 211, 153, 0.45);
+      background: rgba(16, 185, 129, 0.16);
+      color: #6ee7b7;
+    }
+
+    .bsw-header-actions {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      flex-shrink: 0;
+    }
+
+    .bsw-complete-btn {
+      border-color: rgba(52, 211, 153, 0.48) !important;
+      background: linear-gradient(135deg, rgba(16, 185, 129, 0.24), rgba(6, 182, 212, 0.22)) !important;
+      color: #a7f3d0 !important;
+      font-weight: 600 !important;
+    }
+
+    .bsw-complete-btn:hover {
+      background: linear-gradient(135deg, rgba(16, 185, 129, 0.42), rgba(6, 182, 212, 0.36)) !important;
+      color: #ffffff !important;
+    }
+
+    .bsw-complete-btn.is-done {
+      border-color: rgba(251, 191, 36, 0.45) !important;
+      background: rgba(251, 191, 36, 0.14) !important;
+      color: #fde68a !important;
+    }
+
+    .bsw-completed-banner {
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 8px 16px;
+      background: rgba(16, 185, 129, 0.14);
+      border-bottom: 1px solid rgba(52, 211, 153, 0.28);
+      color: #a7f3d0;
+      font-size: 12.5px;
+      flex-shrink: 0;
+    }
+
+    .bsw-completed-banner.open {
+      display: flex;
+    }
+
+    .bsw-body {
+      display: grid;
+      grid-template-columns: minmax(0, 1.16fr) minmax(0, 0.94fr);
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .bsw-left-pane,
+    .bsw-right-pane {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    .bsw-left-pane {
+      border-right: 1px solid rgba(148, 163, 184, 0.16);
+      padding: 12px 14px;
+      gap: 10px;
+    }
+
+    .bsw-right-pane {
+      padding: 12px 14px;
+      gap: 9px;
+      background: rgba(7, 12, 26, 0.42);
+    }
+
+    .bsw-tab-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      flex-wrap: wrap;
+      flex-shrink: 0;
+    }
+
+    .bsw-pane {
+      display: none;
+      flex-direction: column;
+      flex: 1;
+      min-height: 0;
+      gap: 9px;
+    }
+
+    .bsw-pane.active {
+      display: flex;
+    }
+
+    .bsw-nb-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      flex-wrap: wrap;
+      padding: 6px 8px;
+      border-radius: 10px;
+      background: rgba(15, 23, 42, 0.62);
+      border: 1px solid rgba(148, 163, 184, 0.15);
+      flex-shrink: 0;
+    }
+
+    .bsw-nb-tool-btns {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      flex-wrap: wrap;
+    }
+
+    .bsw-mini-btn {
+      padding: 4px 8px;
+      border-radius: 7px;
+      border: 1px solid rgba(148, 163, 184, 0.22);
+      background: rgba(15, 23, 42, 0.75);
+      color: #cbd5e1;
+      font-size: 11.5px;
+      font-family: inherit;
+      cursor: pointer;
+    }
+
+    .bsw-mini-btn:hover {
+      border-color: rgba(125, 211, 252, 0.52);
+      color: #ffffff;
+    }
+
+    .bsw-nb-split {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 10px;
+      flex: 1;
+      min-height: 0;
+    }
+
+    .bsw-nb-split.mode-split {
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .bsw-notebook-editor {
+      width: 100%;
+      height: 100%;
+      min-height: 200px;
+      resize: none;
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: 1px solid rgba(148, 163, 184, 0.22);
+      background: rgba(8, 13, 27, 0.78);
+      color: #e2e8f0;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 13px;
+      line-height: 1.65;
+      outline: none;
+    }
+
+    .bsw-notebook-editor:focus {
+      border-color: rgba(56, 189, 248, 0.58);
+    }
+
+    .bsw-md-preview {
+      overflow-y: auto;
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: 1px solid rgba(148, 163, 184, 0.18);
+      background: rgba(11, 18, 36, 0.72);
+      color: #e2e8f0;
+      font-size: 13px;
+      line-height: 1.65;
+      word-break: break-word;
+    }
+
+    .bsw-md-preview h1,
+    .bsw-md-preview h2,
+    .bsw-md-preview h3 {
+      margin: 10px 0 6px;
+      color: #f8fafc;
+      line-height: 1.35;
+    }
+
+    .bsw-md-preview h1 { font-size: 17px; }
+    .bsw-md-preview h2 { font-size: 15px; border-bottom: 1px solid rgba(148, 163, 184, 0.18); padding-bottom: 4px; }
+    .bsw-md-preview h3 { font-size: 13.5px; color: #bae6fd; }
+    .bsw-md-preview p { margin: 6px 0; }
+    .bsw-md-preview ul, .bsw-md-preview ol { margin: 6px 0 6px 20px; padding: 0; }
+    .bsw-md-preview li { margin: 3px 0; }
+    .bsw-md-preview blockquote {
+      margin: 8px 0;
+      padding: 6px 10px;
+      border-left: 3px solid #38bdf8;
+      background: rgba(56, 189, 248, 0.08);
+      color: #cbd5e1;
+      border-radius: 0 8px 8px 0;
+    }
+    .bsw-md-preview pre {
+      margin: 8px 0;
+      padding: 10px 12px;
+      border-radius: 9px;
+      background: rgba(2, 6, 23, 0.85);
+      border: 1px solid rgba(148, 163, 184, 0.16);
+      overflow-x: auto;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 12px;
+    }
+    .bsw-md-preview code {
+      padding: 1px 5px;
+      border-radius: 5px;
+      background: rgba(148, 163, 184, 0.16);
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 12px;
+      color: #bae6fd;
+    }
+    .bsw-md-preview pre code {
+      padding: 0;
+      background: transparent;
+    }
+    .bsw-md-preview a {
+      color: #38bdf8;
+      text-decoration: underline;
+    }
+
+    .bsw-checklist-list,
+    .bsw-activity-list,
+    .bsw-ai-messages {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding-right: 4px;
+    }
+
+    .bsw-check-row {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      padding: 8px 11px;
+      border-radius: 10px;
+      background: rgba(15, 23, 42, 0.65);
+      border: 1px solid rgba(148, 163, 184, 0.16);
+    }
+
+    .bsw-check-row.done .bsw-check-text {
+      text-decoration: line-through;
+      color: #64748b;
+    }
+
+    .bsw-check-text {
+      flex: 1;
+      font-size: 13px;
+      color: #f1f5f9;
+      word-break: break-word;
+    }
+
+    .bsw-act-row {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 8px 10px;
+      border-radius: 10px;
+      background: rgba(15, 23, 42, 0.56);
+      border: 1px solid rgba(148, 163, 184, 0.14);
+      font-size: 12px;
+    }
+
+    .bsw-ai-chip-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+      flex-shrink: 0;
+    }
+
+    .bsw-ai-msg {
+      padding: 10px 12px;
+      border-radius: 12px;
+      font-size: 12.8px;
+      line-height: 1.58;
+      border: 1px solid rgba(148, 163, 184, 0.18);
+    }
+
+    .bsw-ai-msg.user {
+      align-self: flex-end;
+      max-width: 88%;
+      background: linear-gradient(135deg, rgba(14, 165, 233, 0.24), rgba(99, 102, 241, 0.24));
+      border-color: rgba(56, 189, 248, 0.36);
+      color: #f8fafc;
+    }
+
+    .bsw-ai-msg.assistant {
+      align-self: stretch;
+      background: rgba(15, 23, 42, 0.78);
+      border-color: rgba(167, 139, 250, 0.28);
+    }
+
+    .bsw-ai-msg-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-top: 8px;
+      padding-top: 7px;
+      border-top: 1px solid rgba(148, 163, 184, 0.14);
+    }
+
+    .bsw-ai-dock {
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+      padding-top: 8px;
+      border-top: 1px solid rgba(148, 163, 184, 0.16);
+      flex-shrink: 0;
+    }
+
+    .bsw-ai-input {
+      width: 100%;
+      min-height: 60px;
+      max-height: 140px;
+      resize: vertical;
+      padding: 9px 11px;
+      border-radius: 11px;
+      border: 1px solid rgba(148, 163, 184, 0.24);
+      background: rgba(15, 23, 42, 0.78);
+      color: #f8fafc;
+      font-family: inherit;
+      font-size: 12.8px;
+      outline: none;
+    }
+
+    .bsw-ai-input:focus {
+      border-color: rgba(167, 139, 250, 0.65);
+    }
+
+    @media (max-width: 860px) {
+      .bubble-studio-window {
+        width: 96vw;
+        height: 92vh;
+        min-width: 0;
+        resize: none;
+      }
+      .bsw-body {
+        grid-template-columns: 1fr;
+        grid-template-rows: 1fr 1fr;
+      }
+      .bsw-left-pane {
+        border-right: none;
+        border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+      }
+      .bsw-nb-split.mode-split {
+        grid-template-columns: 1fr;
+      }
+    }
+
     @media (max-width: 920px) {
       .global-search-box {
         flex: 1 1 180px;
@@ -4271,6 +4743,134 @@
             <button class="glass-btn" id="report-copy-md-btn" type="button">📋 复制 Markdown</button>
             <button class="glass-btn" id="report-export-md-btn" type="button">↓ 导出 .md</button>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bubble Studio Independent Floating Window -->
+    <div class="bubble-studio-backdrop" id="bubble-studio-backdrop">
+      <div class="bubble-studio-window" id="bubble-studio-window" role="dialog" aria-modal="true" aria-label="气泡独立工作舱">
+        <header class="bsw-header" id="bsw-header">
+          <div class="bsw-header-left">
+            <span class="bsw-color-dot" id="bsw-color-dot"></span>
+            <input class="bsw-title-input" id="bsw-title-input" type="text" placeholder="任务标题..." />
+            <span class="bsw-meta-pill" id="bsw-galaxy-badge">🪐 默认星系</span>
+            <select class="glass-select" id="bsw-priority-select" style="width:auto;padding:4px 8px;font-size:11.5px;">
+              <option value="normal">普通</option>
+              <option value="high">高优</option>
+              <option value="critical">极紧急</option>
+            </select>
+            <button class="bsw-mini-btn" id="bsw-due-btn" type="button" title="点击设定截止时间">📅 无截止日期</button>
+            <span class="bsw-meta-pill" id="bsw-status-pill">● 进行中</span>
+          </div>
+          <div class="bsw-header-actions">
+            <button class="glass-btn bsw-complete-btn" id="bsw-complete-btn" type="button">✓ 完成此任务</button>
+            <button class="icon-mini-btn" id="bsw-maximize-btn" type="button" title="最大化 / 还原窗口">⛶</button>
+            <button class="icon-mini-btn" id="bsw-close-btn" type="button" title="关闭工作舱 (ESC)">✕</button>
+          </div>
+        </header>
+
+        <div class="bsw-completed-banner" id="bsw-completed-banner">
+          <span id="bsw-completed-banner-text">✓ 此气泡已完成</span>
+          <button class="bsw-mini-btn" id="bsw-reopen-btn" type="button">↺ 恢复进行中</button>
+        </div>
+
+        <div class="bsw-body">
+          <!-- Left: Notebook / Checklist / Activity Log -->
+          <section class="bsw-left-pane">
+            <div class="bsw-tab-bar">
+              <div class="segmented" role="tablist" aria-label="气泡工作区页签">
+                <button class="seg-btn active" type="button" data-bsw-tab="notebook">📓 笔记本</button>
+                <button class="seg-btn" type="button" data-bsw-tab="checklist">☑ 子任务清单 <span id="bsw-checklist-count"></span></button>
+                <button class="seg-btn" type="button" data-bsw-tab="activity">🕒 操作留痕 <span id="bsw-activity-count"></span></button>
+              </div>
+              <span class="hint-text" id="bsw-save-status" style="font-size:11px;">● 已保存至气泡</span>
+            </div>
+
+            <!-- Sub-pane 1: Markdown Notebook -->
+            <div class="bsw-pane active" id="bsw-pane-notebook">
+              <div class="bsw-nb-toolbar">
+                <div class="bsw-nb-tool-btns">
+                  <button class="bsw-mini-btn" type="button" data-bsw-md="h2">H2</button>
+                  <button class="bsw-mini-btn" type="button" data-bsw-md="bold">粗体</button>
+                  <button class="bsw-mini-btn" type="button" data-bsw-md="todo">清单</button>
+                  <button class="bsw-mini-btn" type="button" data-bsw-md="code">代码</button>
+                  <button class="bsw-mini-btn" type="button" data-bsw-md="quote">引用</button>
+                  <button class="bsw-mini-btn" type="button" data-bsw-md="time">🕒 时间戳</button>
+                </div>
+                <div style="display:flex;align-items:center;gap:6px;">
+                  <div class="segmented" role="group" aria-label="笔记视图模式">
+                    <button class="seg-btn" type="button" data-bsw-nb-view="edit">编辑</button>
+                    <button class="seg-btn active" type="button" data-bsw-nb-view="split">分栏</button>
+                    <button class="seg-btn" type="button" data-bsw-nb-view="preview">预览</button>
+                  </div>
+                  <button class="bsw-mini-btn" id="bsw-export-md-btn" type="button" title="导出当前气泡笔记与 AI 记录为 Markdown">↓ 导出 MD</button>
+                </div>
+              </div>
+              <div class="bsw-nb-split mode-split" id="bsw-nb-split">
+                <textarea class="bsw-notebook-editor" id="bsw-notebook-editor" placeholder="在这里自由记录思考、会议纪要、方案草稿或研究笔记（支持 Markdown，自动保存并留存在本气泡中）..."></textarea>
+                <div class="bsw-md-preview" id="bsw-notebook-preview"></div>
+              </div>
+            </div>
+
+            <!-- Sub-pane 2: Actionable Checklist -->
+            <div class="bsw-pane" id="bsw-pane-checklist">
+              <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+                <input class="glass-input" id="bsw-checklist-input" type="text" placeholder="添加可执行子步骤，按回车生成..." style="flex:1;" />
+                <button class="glass-btn" id="bsw-checklist-add-btn" type="button">+ 添加</button>
+                <button class="glass-btn" id="bsw-checklist-to-nb-btn" type="button" title="将当前清单进度同步追加到笔记本">📝 同步到笔记本</button>
+              </div>
+              <div class="hint-text" id="bsw-checklist-progress" style="font-size:11.5px;">0 / 0 已完成</div>
+              <div class="bsw-checklist-list" id="bsw-checklist-list"></div>
+            </div>
+
+            <!-- Sub-pane 3: Persistent Activity Log -->
+            <div class="bsw-pane" id="bsw-pane-activity">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-shrink:0;">
+                <div class="segmented" role="group" aria-label="留痕筛选">
+                  <button class="seg-btn active" type="button" data-bsw-act-filter="all">全部记录</button>
+                  <button class="seg-btn" type="button" data-bsw-act-filter="ai">✦ AI 互动</button>
+                  <button class="seg-btn" type="button" data-bsw-act-filter="work">📓 笔记与任务</button>
+                </div>
+                <span class="hint-text" style="font-size:11px;">所有操作均自动留存在此气泡</span>
+              </div>
+              <div class="bsw-activity-list" id="bsw-activity-list"></div>
+            </div>
+          </section>
+
+          <!-- Right: Per-Bubble Persistent AI Assistant -->
+          <section class="bsw-right-pane">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-shrink:0;">
+              <div style="display:flex;align-items:center;gap:8px;">
+                <span style="font-size:13.5px;font-weight:700;color:#e9d5ff;">✦ 气泡专属 AI 助手</span>
+                <span class="bsw-meta-pill" id="bsw-ai-engine-badge">AGY</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:6px;">
+                <button class="bsw-mini-btn" id="bsw-ai-clear-btn" type="button" title="清空当前气泡对话历史">清空对话</button>
+                <a href="/settings#ai" class="bsw-mini-btn" title="在设置中心配置 AI 引擎" style="text-decoration:none;">⚙</a>
+              </div>
+            </div>
+
+            <div class="bsw-ai-chip-row">
+              <button class="bsw-mini-btn" type="button" data-bsw-prompt="请结合这个气泡的内容，帮我拆解成3-5个清晰可执行的下一步骤。">🎯 拆解执行步骤</button>
+              <button class="bsw-mini-btn" type="button" data-bsw-prompt="请分析推进这个气泡任务可能的风险、前置阻塞和关联依赖。">🧠 风险与依赖</button>
+              <button class="bsw-mini-btn" type="button" data-bsw-prompt="请根据我的笔记本和当前记录，提炼一份简洁的关键要点总结。">✍ 提炼笔记要点</button>
+              <button class="bsw-mini-btn" type="button" data-bsw-prompt="请帮我起草一份可以直接用于落地推进或沟通对齐的行动方案。">⚡ 起草落地方案</button>
+            </div>
+
+            <div class="bsw-ai-messages" id="bsw-ai-messages"></div>
+
+            <div class="bsw-ai-dock">
+              <textarea class="bsw-ai-input" id="bsw-ai-input" placeholder="围绕此气泡向 AI 提问、讨论方案或请求拆解（Enter 发送，Shift+Enter 换行）..."></textarea>
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+                <label class="hint-text" style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:11.5px;">
+                  <input type="checkbox" id="bsw-ai-context-chk" checked />
+                  <span>附带气泡笔记本、子任务清单与关联气泡上下文</span>
+                </label>
+                <button class="glass-btn ai-cluster-btn" id="bsw-ai-send-btn" type="button">✦ 发送提问</button>
+              </div>
+            </div>
+          </section>
         </div>
       </div>
     </div>
@@ -6003,6 +6603,13 @@
         criticalPathTargetId: '__auto__',
         criticalPathIncludeAi: true,
         criticalPathStageLayout: true,
+        bubbleStudioTaskId: null,
+        bubbleStudioTab: 'notebook',
+        bubbleStudioNbView: 'split',
+        bubbleStudioActFilter: 'all',
+        bubbleStudioAiBusy: false,
+        bubbleStudioNbTimer: null,
+        bubbleStudioMaximized: false,
         criticalPathBusy: false,
         criticalPathData: null,
         criticalPathAiResult: null,
@@ -6358,7 +6965,11 @@
             y: Number(t.y.toFixed(2)),
             z: Number(t.z.toFixed(2)),
             floatSeed: t.floatSeed,
-            createdAt: t.createdAt
+            createdAt: t.createdAt,
+            notebook: typeof t.notebook === 'string' ? t.notebook : '',
+            checklist: Array.isArray(t.checklist) ? t.checklist : [],
+            aiHistory: Array.isArray(t.aiHistory) ? t.aiHistory : [],
+            activityLog: Array.isArray(t.activityLog) ? t.activityLog : []
           })),
           manualLinks: state.manualLinks,
           clusters: state.clusters.map(c => ({
@@ -6407,7 +7018,30 @@
             vy: 0,
             vz: 0,
             floatSeed: Number.isFinite(t.floatSeed) ? t.floatSeed : Math.random() * Math.PI * 2,
-            createdAt: t.createdAt || Date.now()
+            createdAt: t.createdAt || Date.now(),
+            notebook: typeof t.notebook === 'string' ? t.notebook : '',
+            checklist: Array.isArray(t.checklist) ? t.checklist.map(c => ({
+              id: c.id || uid('chk'),
+              text: String(c.text || '').trim(),
+              done: Boolean(c.done),
+              createdAt: Number.isFinite(c.createdAt) ? c.createdAt : Date.now(),
+              completedAt: (c.done && Number.isFinite(c.completedAt)) ? c.completedAt : null
+            })).filter(c => c.text) : [],
+            aiHistory: Array.isArray(t.aiHistory) ? t.aiHistory.map(m => ({
+              id: m.id || uid('ai'),
+              role: m.role === 'assistant' ? 'assistant' : 'user',
+              content: String(m.content || ''),
+              createdAt: Number.isFinite(m.createdAt) ? m.createdAt : Date.now(),
+              model: String(m.model || ''),
+              engine: String(m.engine || ''),
+              suggestedSteps: Array.isArray(m.suggestedSteps) ? m.suggestedSteps.map(String).filter(Boolean) : []
+            })).filter(m => m.content) : [],
+            activityLog: Array.isArray(t.activityLog) ? t.activityLog.map(a => ({
+              id: a.id || uid('act'),
+              type: String(a.type || 'event'),
+              text: String(a.text || ''),
+              createdAt: Number.isFinite(a.createdAt) ? a.createdAt : Date.now()
+            })).filter(a => a.text) : []
           };
         }) : [];
 
@@ -10763,7 +11397,7 @@
       canvas.addEventListener('dblclick', e => {
         const hit = hitTestBubble(e.clientX, e.clientY);
         if (hit) {
-          selectTask(hit.id, { spotlight: true });
+          openBubbleStudio(hit.id);
           return;
         }
         // Unproject screen point onto z2 = 0 camera plane
@@ -10888,7 +11522,13 @@
           vy: 0,
           vz: 0,
           floatSeed: Math.random() * Math.PI * 2,
-          createdAt: Date.now()
+          createdAt: Date.now(),
+          notebook: '',
+          checklist: [],
+          aiHistory: [],
+          activityLog: [
+            { id: uid('act'), type: 'create', text: `创建气泡「${cleanTitle.slice(0, 40)}」`, createdAt: Date.now() }
+          ]
         };
 
         state.tasks.push(newTask);
@@ -10985,10 +11625,11 @@
           const compText = formatCompletedTime(nowTs, nowTs);
           task.completed = true;
           task.completedAt = nowTs;
-          if (runtime.selectedTaskId === taskId && !state.prefs.showCompleted) {
+          appendBubbleActivity(task, 'task_complete', `标记任务已完成（${compText}）`);
+          if (runtime.selectedTaskId === taskId && !state.prefs.showCompleted && runtime.bubbleStudioTaskId !== taskId) {
             runtime.selectedTaskId = null;
           }
-          if (runtime.focusSpotlightTaskId === taskId && !state.prefs.showCompleted) {
+          if (runtime.focusSpotlightTaskId === taskId && !state.prefs.showCompleted && runtime.bubbleStudioTaskId !== taskId) {
             runtime.focusSpotlightTaskId = null;
             runtime.spotlightLayout = null;
             runtime.activeSpotlightMeta = null;
@@ -10999,6 +11640,7 @@
           saveState(false, `完成「${task.title.slice(0, 14)}」(${compText})`);
           renderAllChrome();
           updateLinkBanner();
+          if (runtime.bubbleStudioTaskId === taskId) renderBubbleStudio();
 
           if (!state.prefs.showCompleted) {
             showToast(`已完成「${task.title}」· ${compText}（默认已隐藏）`, [
@@ -11026,6 +11668,7 @@
         } else {
           task.completed = false;
           task.completedAt = null;
+          appendBubbleActivity(task, 'task_reopen', '恢复任务为进行中');
           if (runtime.completedTodayView) {
             if (runtime.selectedTaskId === taskId) runtime.selectedTaskId = null;
             if (runtime.focusSpotlightTaskId === taskId) {
@@ -11041,11 +11684,13 @@
           }
           saveState(false, `恢复「${task.title.slice(0, 16)}」`);
           renderAllChrome();
+          if (runtime.bubbleStudioTaskId === taskId) renderBubbleStudio();
           showToast(`已恢复任务「${task.title}」`);
         }
       }
 
       function deleteTask(taskId) {
+        if (runtime.bubbleStudioTaskId === taskId) closeBubbleStudio();
         const target = state.tasks.find(t => t.id === taskId);
         state.tasks = state.tasks.filter(t => t.id !== taskId);
         state.manualLinks = state.manualLinks.filter(l => l.source !== taskId && l.target !== taskId);
@@ -11847,6 +12492,12 @@
             创建于 ${escapeHtml(formatCompletedFull(task.createdAt) || '未知时间')}
           </div>
           <div class="field-group">
+            <button class="glass-btn ai-cluster-btn" id="insp-open-studio-btn" type="button" style="width:100%;justify-content:space-between;">
+              <span>📖 打开独立工作舱（笔记本 · AI）</span>
+              <span id="insp-studio-badge" style="font-size:11px;opacity:0.9;"></span>
+            </button>
+          </div>
+          <div class="field-group">
             <button class="glass-btn" id="insp-cp-target-btn" type="button" style="width:100%;justify-content:center;border-color:rgba(251,191,36,0.42);color:#fef3c7;">
               🧭 以此为终点生成关键路径
             </button>
@@ -12124,6 +12775,18 @@
           });
         }
 
+        const studioBadge = body.querySelector('#insp-studio-badge');
+        if (studioBadge) {
+          const nbLen = (task.notebook || '').trim().length;
+          const clArr = Array.isArray(task.checklist) ? task.checklist : [];
+          const aiCount = Array.isArray(task.aiHistory) ? task.aiHistory.length : 0;
+          const parts = [];
+          if (nbLen) parts.push(`${nbLen}字`);
+          if (clArr.length) parts.push(`${clArr.filter(c => c.done).length}/${clArr.length}项`);
+          if (aiCount) parts.push(`${aiCount}条AI`);
+          studioBadge.textContent = parts.length ? parts.join(' · ') : '双击气泡打开';
+        }
+        body.querySelector('#insp-open-studio-btn')?.addEventListener('click', () => openBubbleStudio(task.id));
         body.querySelector('#insp-cp-target-btn')?.addEventListener('click', () => openCriticalPath({ targetTaskId: task.id }));
         body.querySelector('#insp-complete-btn').addEventListener('click', () => toggleTaskComplete(task.id));
         body.querySelector('#insp-delete-btn').addEventListener('click', () => deleteTask(task.id));
@@ -13665,8 +14328,892 @@
         }
       }
 
+      // ---------- Bubble Studio Independent Floating Window ----------
+      function appendBubbleActivity(task, type, text, { coalesceSec = 0 } = {}) {
+        if (!task || !text) return null;
+        if (!Array.isArray(task.activityLog)) task.activityLog = [];
+        const nowTs = Date.now();
+        const cleanText = String(text).trim().slice(0, 300);
+        if (!cleanText) return null;
+        const last = task.activityLog[task.activityLog.length - 1];
+        if (
+          coalesceSec > 0 &&
+          last &&
+          last.type === type &&
+          Number.isFinite(last.createdAt) &&
+          (nowTs - last.createdAt) < coalesceSec * 1000
+        ) {
+          last.text = cleanText;
+          last.createdAt = nowTs;
+          return last;
+        }
+        const entry = {
+          id: uid('act'),
+          type: String(type || 'event').slice(0, 40),
+          text: cleanText,
+          createdAt: nowTs
+        };
+        task.activityLog.push(entry);
+        if (task.activityLog.length > 150) {
+          task.activityLog = task.activityLog.slice(-150);
+        }
+        return entry;
+      }
+
+      function renderSafeMarkdown(md) {
+        const raw = String(md || '');
+        if (!raw.trim()) {
+          return '<div class="hint-text" style="color:#64748b;">暂无笔记内容。可在左侧输入 Markdown，所有记录将自动保存在当前气泡中。</div>';
+        }
+        const escaped = escapeHtml(raw);
+        const codeBlocks = [];
+        const withBlocks = escaped.replace(/```([a-zA-Z0-9_-]*)\n?([\s\S]*?)```/g, (_m, _lang, code) => {
+          const idx = codeBlocks.length;
+          codeBlocks.push(`<pre><code>${code.replace(/\n$/, '')}</code></pre>`);
+          return `\u0000CODEBLOCK_${idx}\u0000`;
+        });
+
+        const inlineFormat = (str) => {
+          return str
+            .replace(/`([^`\n]+)`/g, '<code>$1</code>')
+            .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+            .replace(/\*([^*\n]+)\*/g, '<em>$1</em>')
+            .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+        };
+
+        const lines = withBlocks.split(/\r?\n/);
+        const htmlParts = [];
+        let listTag = null;
+        const closeList = () => {
+          if (listTag) {
+            htmlParts.push(`</${listTag}>`);
+            listTag = null;
+          }
+        };
+
+        for (const line of lines) {
+          const cbMatch = line.match(/^\u0000CODEBLOCK_(\d+)\u0000$/);
+          if (cbMatch) {
+            closeList();
+            htmlParts.push(codeBlocks[Number(cbMatch[1])]);
+            continue;
+          }
+          if (!line.trim()) {
+            closeList();
+            continue;
+          }
+          const hMatch = line.match(/^(#{1,3})\s+(.+)$/);
+          if (hMatch) {
+            closeList();
+            const lvl = hMatch[1].length;
+            htmlParts.push(`<h${lvl}>${inlineFormat(hMatch[2])}</h${lvl}>`);
+            continue;
+          }
+          const bqMatch = line.match(/^&gt;\s?(.*)$/);
+          if (bqMatch) {
+            closeList();
+            htmlParts.push(`<blockquote>${inlineFormat(bqMatch[1])}</blockquote>`);
+            continue;
+          }
+          const chkMatch = line.match(/^\s*[-*]\s+\[( |x|X)\]\s+(.+)$/);
+          if (chkMatch) {
+            if (listTag !== 'ul') { closeList(); htmlParts.push('<ul>'); listTag = 'ul'; }
+            const checked = chkMatch[1].toLowerCase() === 'x';
+            htmlParts.push(`<li style="list-style:none;margin-left:-14px;">${checked ? '☑' : '☐'} ${inlineFormat(chkMatch[2])}</li>`);
+            continue;
+          }
+          const ulMatch = line.match(/^\s*[-*•]\s+(.+)$/);
+          if (ulMatch) {
+            if (listTag !== 'ul') { closeList(); htmlParts.push('<ul>'); listTag = 'ul'; }
+            htmlParts.push(`<li>${inlineFormat(ulMatch[1])}</li>`);
+            continue;
+          }
+          const olMatch = line.match(/^\s*\d+[.)、]\s+(.+)$/);
+          if (olMatch) {
+            if (listTag !== 'ol') { closeList(); htmlParts.push('<ol>'); listTag = 'ol'; }
+            htmlParts.push(`<li>${inlineFormat(olMatch[1])}</li>`);
+            continue;
+          }
+          closeList();
+          htmlParts.push(`<p>${inlineFormat(line)}</p>`);
+        }
+        closeList();
+        return htmlParts.join('\n').replace(/\u0000CODEBLOCK_(\d+)\u0000/g, (_m, i) => codeBlocks[Number(i)]);
+      }
+
+      function buildBubbleStudioTaskContext(task, includeRich = true) {
+        const gal = getGalaxyById(getTaskGalaxyId(task));
+        const cl = getClusterById(task.clusterId);
+        const linked = (state.manualLinks || [])
+          .filter(l => l.source === task.id || l.target === task.id)
+          .map(l => {
+            const peer = state.tasks.find(t => t.id === (l.source === task.id ? l.target : l.source));
+            return peer ? { id: peer.id, title: peer.title, completed: Boolean(peer.completed), label: l.label || '' } : null;
+          })
+          .filter(Boolean);
+        return {
+          id: task.id,
+          title: task.title,
+          galaxyName: gal ? gal.name : '默认星系',
+          clusterName: cl ? cl.name : '',
+          priority: task.priority || 'normal',
+          completed: Boolean(task.completed),
+          dueAtStr: task.dueAt ? formatDueShort(task.dueAt) : '',
+          tags: Array.isArray(task.tags) ? [...task.tags] : [],
+          notes: task.notes || '',
+          notebook: includeRich ? (task.notebook || '') : '',
+          checklist: includeRich ? (task.checklist || []) : [],
+          linkedTasks: includeRich ? linked : []
+        };
+      }
+
+      function generateBuiltinBubbleAiReply(task, question, ctx) {
+        const q = String(question || '').toLowerCase();
+        const cl = ctx.checklist || [];
+        const pendingCl = cl.filter(c => !c.done).map(c => c.text);
+        const nb = String(ctx.notebook || '').trim();
+        const links = ctx.linkedTasks || [];
+
+        let heading = `### 💡 围绕「${task.title}」的分析与建议`;
+        let suggestedSteps = [];
+        const blocks = [];
+
+        if (/拆解|步骤|step|怎么推进|如何开始/.test(q)) {
+          heading = `### 🎯 「${task.title}」执行拆解`;
+          suggestedSteps = pendingCl.length
+            ? pendingCl.slice(0, 5)
+            : [
+                `明确「${task.title}」的验收标准与核心产出物`,
+                links.length ? `先对齐关联气泡：${links.slice(0, 2).map(l => l.title).join('、')}` : `梳理完成「${task.title}」所需资源与前置输入`,
+                `完成首版可执行方案或原型并记录关键结论到笔记本`,
+                `复核验收结果并在工作舱标记「完成此任务」`
+              ];
+          blocks.push('建议按以下最小闭环步骤推进（可直接一键加入左侧子任务清单）：');
+          blocks.push(suggestedSteps.map((s, i) => `${i + 1}. ${s}`).join('\n'));
+        } else if (/风险|阻塞|依赖|risk/.test(q)) {
+          heading = `### 🧠 「${task.title}」风险与依赖扫描`;
+          const openLinks = links.filter(l => !l.completed);
+          blocks.push(openLinks.length
+            ? `- **前置/关联未完成项 (${openLinks.length})**：${openLinks.map(l => `「${l.title}」`).join('、')}，建议优先确认接口或节奏。`
+            : '- **外部关联**：当前未检测到未完成的强依赖连线。');
+          blocks.push(task.dueAt
+            ? `- **时间窗口**：截止时间为 **${formatDueShort(task.dueAt)}**，建议拆出缓冲期。`
+            : '- **时间窗口**：尚未设置截止日期，如属重要事项建议绑定目标时间点防止拖延。');
+          suggestedSteps = [
+            openLinks.length ? `确认前置项「${openLinks[0].title}」当前进展` : `核对「${task.title}」关键假设与潜在卡点`,
+            '设定明确的检查节点与止损/备选方案'
+          ];
+          blocks.push('\n推荐护栏动作：\n' + suggestedSteps.map((s, i) => `${i + 1}. ${s}`).join('\n'));
+        } else if (/提炼|总结|要点|笔记|summary/.test(q)) {
+          heading = `### ✍ 「${task.title}」要点提炼`;
+          const nbLines = nb.split(/\r?\n/).map(s => s.trim()).filter(Boolean).slice(0, 6);
+          blocks.push(`- **任务状态**：${task.completed ? '已完成' : '进行中'} · 优先级：${PRIORITY_LABEL[task.priority] || '普通'}`);
+          if (nbLines.length) {
+            blocks.push(`- **笔记本关键摘录**：\n${nbLines.map(l => `  - ${l.replace(/^#+\s*/, '')}`).join('\n')}`);
+          } else {
+            blocks.push('- **笔记本状态**：当前笔记本暂无正文，建议随手记录核心判断与待决问题。');
+          }
+          if (cl.length) {
+            blocks.push(`- **子任务清单进度**：${cl.filter(c => c.done).length}/${cl.length} 已完成`);
+          }
+          suggestedSteps = pendingCl.slice(0, 3);
+        } else {
+          suggestedSteps = [
+            `聚焦推进「${task.title}」最关键的第一步`,
+            '把讨论得出的决定补充进气泡笔记本以便回溯'
+          ];
+          blocks.push(`针对你的问题「${question.trim().slice(0, 80)}」，结合当前气泡状态整理如下：`);
+          blocks.push(`- **所属星系**：${ctx.galaxyName}${ctx.clusterName ? ` / ${ctx.clusterName}` : ''}`);
+          if (nb) blocks.push(`- **已参考笔记本**（${nb.length} 字）及 **${pendingCl.length}** 项未完成子任务。`);
+          blocks.push('\n建议下一步：\n' + suggestedSteps.map((s, i) => `${i + 1}. ${s}`).join('\n'));
+        }
+
+        return {
+          reply: `${heading}\n\n${blocks.join('\n\n')}`,
+          suggestedSteps
+        };
+      }
+
+      function syncBubbleStudioNbView() {
+        const split = document.getElementById('bsw-nb-split');
+        const editor = document.getElementById('bsw-notebook-editor');
+        const preview = document.getElementById('bsw-notebook-preview');
+        if (!split || !editor || !preview) return;
+        const mode = runtime.bubbleStudioNbView || 'split';
+        split.classList.toggle('mode-split', mode === 'split');
+        editor.style.display = mode === 'preview' ? 'none' : 'block';
+        preview.style.display = mode === 'edit' ? 'none' : 'block';
+        document.querySelectorAll('[data-bsw-nb-view]').forEach(btn => {
+          btn.classList.toggle('active', btn.dataset.bswNbView === mode);
+        });
+      }
+
+      function renderBubbleStudioNotebook(task) {
+        const editor = document.getElementById('bsw-notebook-editor');
+        const preview = document.getElementById('bsw-notebook-preview');
+        const saveStatus = document.getElementById('bsw-save-status');
+        if (!editor || !preview) return;
+        if (editor.value !== (task.notebook || '')) {
+          editor.value = task.notebook || '';
+        }
+        preview.innerHTML = renderSafeMarkdown(task.notebook || '');
+        if (saveStatus) saveStatus.textContent = '● 已保存至气泡';
+        syncBubbleStudioNbView();
+      }
+
+      function renderBubbleStudioChecklist(task) {
+        const listEl = document.getElementById('bsw-checklist-list');
+        const progEl = document.getElementById('bsw-checklist-progress');
+        const badgeEl = document.getElementById('bsw-checklist-count');
+        const items = Array.isArray(task.checklist) ? task.checklist : [];
+        const doneCount = items.filter(c => c.done).length;
+        if (badgeEl) badgeEl.textContent = items.length ? `(${doneCount}/${items.length})` : '';
+        if (progEl) progEl.textContent = `${doneCount} / ${items.length} 已完成`;
+        if (!listEl) return;
+        listEl.innerHTML = '';
+        if (!items.length) {
+          listEl.innerHTML = '<div class="hint-text" style="padding:12px;">暂无子任务，可在上方添加，或让右侧 AI 助手拆解步骤后一键加入。</div>';
+          return;
+        }
+        for (const item of items) {
+          const row = document.createElement('div');
+          row.className = `bsw-check-row${item.done ? ' done' : ''}`;
+          const chk = document.createElement('input');
+          chk.type = 'checkbox';
+          chk.checked = Boolean(item.done);
+          chk.addEventListener('change', () => {
+            item.done = chk.checked;
+            item.completedAt = item.done ? Date.now() : null;
+            appendBubbleActivity(task, 'checklist_toggle', `${item.done ? '完成子任务' : '恢复子任务'}「${item.text.slice(0, 40)}」`);
+            saveState(false, `${item.done ? '完成' : '恢复'}子任务`);
+            renderBubbleStudioChecklist(task);
+            renderBubbleStudioActivity(task);
+          });
+          const span = document.createElement('span');
+          span.className = 'bsw-check-text';
+          span.textContent = item.text;
+          const delBtn = document.createElement('button');
+          delBtn.type = 'button';
+          delBtn.className = 'icon-mini-btn';
+          delBtn.title = '删除子任务';
+          delBtn.textContent = '×';
+          delBtn.addEventListener('click', () => {
+            task.checklist = (task.checklist || []).filter(c => c.id !== item.id);
+            appendBubbleActivity(task, 'checklist_delete', `移除子任务「${item.text.slice(0, 40)}」`);
+            saveState(false, '移除子任务');
+            renderBubbleStudioChecklist(task);
+            renderBubbleStudioActivity(task);
+          });
+          row.appendChild(chk);
+          row.appendChild(span);
+          row.appendChild(delBtn);
+          listEl.appendChild(row);
+        }
+      }
+
+      function renderBubbleStudioActivity(task) {
+        const listEl = document.getElementById('bsw-activity-list');
+        const badgeEl = document.getElementById('bsw-activity-count');
+        const rawLog = Array.isArray(task.activityLog) ? task.activityLog : [];
+        if (badgeEl) badgeEl.textContent = rawLog.length ? `(${rawLog.length})` : '';
+        document.querySelectorAll('[data-bsw-act-filter]').forEach(btn => {
+          btn.classList.toggle('active', btn.dataset.bswActFilter === (runtime.bubbleStudioActFilter || 'all'));
+        });
+        if (!listEl) return;
+        const filter = runtime.bubbleStudioActFilter || 'all';
+        const filtered = [...rawLog].reverse().filter(entry => {
+          if (filter === 'ai') return String(entry.type || '').startsWith('ai_');
+          if (filter === 'work') return !String(entry.type || '').startsWith('ai_');
+          return true;
+        });
+        listEl.innerHTML = '';
+        if (!filtered.length) {
+          listEl.innerHTML = '<div class="hint-text" style="padding:12px;">暂无操作留痕记录。编辑笔记、子任务、完成状态或与 AI 对话都会自动留存在这里。</div>';
+          return;
+        }
+        for (const entry of filtered) {
+          const row = document.createElement('div');
+          row.className = 'bsw-act-row';
+          const left = document.createElement('span');
+          left.textContent = entry.text;
+          const right = document.createElement('span');
+          right.className = 'hint-text';
+          right.style.flexShrink = '0';
+          right.textContent = formatCompletedFull(entry.createdAt) || '';
+          row.appendChild(left);
+          row.appendChild(right);
+          listEl.appendChild(row);
+        }
+      }
+
+      function renderBubbleStudioAiMessages(task) {
+        const box = document.getElementById('bsw-ai-messages');
+        const badge = document.getElementById('bsw-ai-engine-badge');
+        if (badge) {
+          const mode = state.prefs.aiMode || 'agy';
+          badge.textContent = mode === 'agy' ? 'AGY' : (mode === 'llm' ? 'LLM' : '内置离线');
+        }
+        if (!box) return;
+        const history = Array.isArray(task.aiHistory) ? task.aiHistory : [];
+        box.innerHTML = '';
+        if (!history.length) {
+          box.innerHTML = '<div class="hint-text" style="padding:14px;text-align:center;">围绕「' + escapeHtml(task.title) + '」向 AI 提问，或点击上方快捷指令。<br>所有对话与方案均会自动留存在该气泡中。</div>';
+          return;
+        }
+        for (const msg of history) {
+          const card = document.createElement('div');
+          card.className = `bsw-ai-msg ${msg.role === 'assistant' ? 'assistant' : 'user'}`;
+          if (msg.role === 'assistant') {
+            const header = document.createElement('div');
+            header.className = 'hint-text';
+            header.style.marginBottom = '5px';
+            header.textContent = `✦ ${msg.engine ? msg.engine.toUpperCase() : 'AI'}${msg.model ? ` (${msg.model})` : ''} · ${formatCompletedFull(msg.createdAt) || ''}`;
+            const bodyDiv = document.createElement('div');
+            bodyDiv.className = 'bsw-md-preview';
+            bodyDiv.style.padding = '0';
+            bodyDiv.style.border = 'none';
+            bodyDiv.style.background = 'transparent';
+            bodyDiv.innerHTML = renderSafeMarkdown(msg.content);
+            const actRow = document.createElement('div');
+            actRow.className = 'bsw-ai-msg-actions';
+
+            const toNbBtn = document.createElement('button');
+            toNbBtn.type = 'button';
+            toNbBtn.className = 'bsw-mini-btn';
+            toNbBtn.textContent = '📝 存入笔记本';
+            toNbBtn.addEventListener('click', () => {
+              const sep = (task.notebook || '').trim() ? '\n\n---\n\n' : '';
+              task.notebook = `${task.notebook || ''}${sep}### ✦ AI 建议 (${formatCompletedFull(Date.now())})\n\n${msg.content}`;
+              appendBubbleActivity(task, 'ai_to_notebook', '将 AI 回复存入气泡笔记本');
+              saveState(false, '将 AI 回复存入笔记本');
+              renderBubbleStudioNotebook(task);
+              renderBubbleStudioActivity(task);
+              showToast('已存入当前气泡笔记本');
+            });
+            actRow.appendChild(toNbBtn);
+
+            const steps = (Array.isArray(msg.suggestedSteps) && msg.suggestedSteps.length)
+              ? msg.suggestedSteps
+              : msg.content.split(/\r?\n/).map(l => {
+                  const m = l.match(/^\s*(?:[-*•]|\d+[.)、])\s+(?:\[[ xX]\]\s+)?(.+)$/);
+                  return m ? m[1].trim() : '';
+                }).filter(Boolean).slice(0, 6);
+
+            if (steps.length) {
+              const toClBtn = document.createElement('button');
+              toClBtn.type = 'button';
+              toClBtn.className = 'bsw-mini-btn';
+              toClBtn.textContent = `☑ 加入子任务清单 (${steps.length})`;
+              toClBtn.addEventListener('click', () => {
+                if (!Array.isArray(task.checklist)) task.checklist = [];
+                const existing = new Set(task.checklist.map(c => c.text.trim().toLowerCase()));
+                let added = 0;
+                for (const s of steps) {
+                  const clean = String(s || '').trim().slice(0, 200);
+                  if (!clean || existing.has(clean.toLowerCase())) continue;
+                  existing.add(clean.toLowerCase());
+                  task.checklist.push({ id: uid('chk'), text: clean, done: false, createdAt: Date.now(), completedAt: null });
+                  added++;
+                }
+                if (added > 0) {
+                  appendBubbleActivity(task, 'ai_to_checklist', `将 AI 拆解的 ${added} 项步骤加入子任务清单`);
+                  saveState(false, `导入 ${added} 项 AI 子任务`);
+                  renderBubbleStudioChecklist(task);
+                  renderBubbleStudioActivity(task);
+                }
+                showToast(added ? `已加入 ${added} 项到子任务清单` : '这些步骤已在子任务清单中');
+              });
+              actRow.appendChild(toClBtn);
+            }
+
+            const copyBtn = document.createElement('button');
+            copyBtn.type = 'button';
+            copyBtn.className = 'bsw-mini-btn';
+            copyBtn.textContent = '📋 复制';
+            copyBtn.addEventListener('click', async () => {
+              try {
+                await navigator.clipboard?.writeText(msg.content);
+                showToast('已复制 AI 回复');
+              } catch (_) {
+                showToast('已选中回复文本');
+              }
+            });
+            actRow.appendChild(copyBtn);
+
+            card.appendChild(header);
+            card.appendChild(bodyDiv);
+            card.appendChild(actRow);
+          } else {
+            card.textContent = msg.content;
+          }
+          box.appendChild(card);
+        }
+        if (runtime.bubbleStudioAiBusy) {
+          const waitEl = document.createElement('div');
+          waitEl.className = 'bsw-ai-msg assistant';
+          waitEl.textContent = '✦ AI 正在结合气泡笔记本与上下文思考中...';
+          box.appendChild(waitEl);
+        }
+        box.scrollTop = box.scrollHeight;
+      }
+
+      async function sendBubbleStudioAiMessage(rawQuestion) {
+        const task = state.tasks.find(t => t.id === runtime.bubbleStudioTaskId);
+        const question = String(rawQuestion || '').trim();
+        if (!task || !question || runtime.bubbleStudioAiBusy) return;
+
+        if (!Array.isArray(task.aiHistory)) task.aiHistory = [];
+        const historySnapshot = task.aiHistory.slice(-10).map(m => ({ role: m.role, content: m.content }));
+        task.aiHistory.push({
+          id: uid('ai'),
+          role: 'user',
+          content: question,
+          createdAt: Date.now(),
+          model: '',
+          engine: '',
+          suggestedSteps: []
+        });
+        appendBubbleActivity(task, 'ai_chat', `向 AI 提问：「${question.slice(0, 60)}」`);
+        saveState(false, `气泡 AI 提问「${task.title.slice(0, 12)}」`);
+
+        const inputEl = document.getElementById('bsw-ai-input');
+        if (inputEl && inputEl.value.trim() === question) inputEl.value = '';
+
+        runtime.bubbleStudioAiBusy = true;
+        const sendBtn = document.getElementById('bsw-ai-send-btn');
+        if (sendBtn) sendBtn.disabled = true;
+        renderBubbleStudioAiMessages(task);
+        renderBubbleStudioActivity(task);
+
+        const includeRich = document.getElementById('bsw-ai-context-chk')?.checked !== false;
+        const ctx = buildBubbleStudioTaskContext(task, includeRich);
+        const mode = state.prefs.aiMode || 'agy';
+        let replyObj = null;
+        let usedEngine = mode;
+        let usedModel = '';
+
+        const callExternalLlm = async () => {
+          const prompt =
+            '你是 MindBubble 气泡工作舱的专属 AI 助手，请结合上下文用简洁清晰的中文 Markdown 回答，并尽量返回 JSON {"reply":"Markdown正文","suggestedSteps":["行动步1","行动步2"]}：\n' +
+            `上下文：${JSON.stringify(ctx)}\n历史：${JSON.stringify(historySnapshot)}\n问题：${question}`;
+          let raw = '';
+          if (state.prefs.llmProvider === 'gemini') {
+            const sep = state.prefs.llmEndpoint.includes('?') ? '&' : '?';
+            const res = await fetch(`${state.prefs.llmEndpoint}${sep}key=${encodeURIComponent(state.prefs.llmApiKey)}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.4 } })
+            });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+            raw = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+          } else {
+            const res = await fetch(state.prefs.llmEndpoint, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${state.prefs.llmApiKey}` },
+              body: JSON.stringify({
+                model: state.prefs.llmModel || 'gpt-4o-mini',
+                messages: [{ role: 'user', content: prompt }],
+                temperature: 0.4
+              })
+            });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+            raw = data?.choices?.[0]?.message?.content || '';
+          }
+          const m = raw.replace(/```json|```/g, '').trim().match(/\{[\s\S]*\}/);
+          if (m) {
+            try {
+              const p = JSON.parse(m[0]);
+              if (p.reply) return { reply: String(p.reply), suggestedSteps: Array.isArray(p.suggestedSteps) ? p.suggestedSteps.map(String) : [] };
+            } catch (_) {}
+          }
+          return { reply: raw.trim(), suggestedSteps: [] };
+        };
+
+        try {
+          if (mode === 'agy' && runtime.backendAvailable) {
+            try {
+              const res = await fetch('/api/ai/bubble-chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  taskContext: ctx,
+                  messages: historySnapshot,
+                  question,
+                  model: state.prefs.agyModel || 'gemini-4-hydrogen-medium'
+                })
+              });
+              const data = await res.json().catch(() => ({}));
+              if (!res.ok || !data.ok || !data.reply) {
+                throw new Error(data.error || `HTTP ${res.status}`);
+              }
+              replyObj = { reply: data.reply, suggestedSteps: Array.isArray(data.suggestedSteps) ? data.suggestedSteps : [] };
+              usedEngine = 'agy';
+              usedModel = data.model || state.prefs.agyModel || 'agy';
+            } catch (err) {
+              if (state.prefs.llmApiKey && state.prefs.llmApiKey.trim()) {
+                try {
+                  replyObj = await callExternalLlm();
+                  usedEngine = 'llm';
+                  usedModel = state.prefs.llmModel || state.prefs.llmProvider;
+                } catch (_) {}
+              }
+              if (!replyObj) {
+                replyObj = generateBuiltinBubbleAiReply(task, question, ctx);
+                usedEngine = 'builtin-fallback';
+                usedModel = err.message;
+              }
+            }
+          } else if (mode === 'llm' && state.prefs.llmApiKey && state.prefs.llmApiKey.trim()) {
+            try {
+              replyObj = await callExternalLlm();
+              usedEngine = 'llm';
+              usedModel = state.prefs.llmModel || state.prefs.llmProvider;
+            } catch (_) {
+              replyObj = generateBuiltinBubbleAiReply(task, question, ctx);
+              usedEngine = 'builtin-fallback';
+            }
+          } else {
+            replyObj = generateBuiltinBubbleAiReply(task, question, ctx);
+            usedEngine = 'builtin';
+          }
+
+          task.aiHistory.push({
+            id: uid('ai'),
+            role: 'assistant',
+            content: String(replyObj?.reply || '（暂无回复）'),
+            createdAt: Date.now(),
+            model: usedModel,
+            engine: usedEngine,
+            suggestedSteps: Array.isArray(replyObj?.suggestedSteps) ? replyObj.suggestedSteps : []
+          });
+          appendBubbleActivity(task, 'ai_reply', `AI 回复已保存至气泡（${usedEngine}）`);
+          saveState(false, `保存气泡 AI 回复「${task.title.slice(0, 12)}」`);
+        } finally {
+          runtime.bubbleStudioAiBusy = false;
+          if (sendBtn) sendBtn.disabled = false;
+          renderBubbleStudioAiMessages(task);
+          renderBubbleStudioActivity(task);
+        }
+      }
+
+      function switchBubbleStudioTab(tabName) {
+        if (!['notebook', 'checklist', 'activity'].includes(tabName)) return;
+        runtime.bubbleStudioTab = tabName;
+        document.querySelectorAll('[data-bsw-tab]').forEach(btn => {
+          btn.classList.toggle('active', btn.dataset.bswTab === tabName);
+        });
+        ['notebook', 'checklist', 'activity'].forEach(t => {
+          document.getElementById(`bsw-pane-${t}`)?.classList.toggle('active', t === tabName);
+        });
+      }
+
+      function renderBubbleStudio() {
+        const backdrop = document.getElementById('bubble-studio-backdrop');
+        const task = state.tasks.find(t => t.id === runtime.bubbleStudioTaskId);
+        if (!backdrop || !task) return;
+
+        const cl = getClusterById(task.clusterId);
+        const gal = getGalaxyById(getTaskGalaxyId(task));
+        const dot = document.getElementById('bsw-color-dot');
+        if (dot) {
+          const color = cl ? cl.color : (gal ? gal.color : '#38bdf8');
+          dot.style.background = color;
+          dot.style.color = color;
+        }
+        const titleInp = document.getElementById('bsw-title-input');
+        if (titleInp && titleInp.value !== task.title) titleInp.value = task.title;
+        const galBadge = document.getElementById('bsw-galaxy-badge');
+        if (galBadge) galBadge.textContent = `${gal.icon} ${gal.name}`;
+        const prioSel = document.getElementById('bsw-priority-select');
+        if (prioSel) prioSel.value = task.priority || 'normal';
+        const dueBtn = document.getElementById('bsw-due-btn');
+        if (dueBtn) dueBtn.textContent = task.dueAt ? `📅 ${formatDueShort(task.dueAt)}` : '📅 无截止日期';
+
+        const statusPill = document.getElementById('bsw-status-pill');
+        if (statusPill) {
+          statusPill.className = `bsw-meta-pill${task.completed ? ' done' : ''}`;
+          statusPill.textContent = task.completed ? '✓ 已完成' : '● 进行中';
+        }
+        const compBtn = document.getElementById('bsw-complete-btn');
+        if (compBtn) {
+          compBtn.classList.toggle('is-done', Boolean(task.completed));
+          compBtn.textContent = task.completed ? '↺ 恢复进行中' : '✓ 完成此任务';
+        }
+        const banner = document.getElementById('bsw-completed-banner');
+        const bannerText = document.getElementById('bsw-completed-banner-text');
+        if (banner) banner.classList.toggle('open', Boolean(task.completed));
+        if (bannerText && task.completed) {
+          const compAtStr = task.completedAt ? formatCompletedFull(task.completedAt) : '刚刚';
+          bannerText.textContent = `✓ 此任务已于 ${compAtStr} 完成，笔记本与 AI 对话记录均已完整封存`;
+        }
+
+        switchBubbleStudioTab(runtime.bubbleStudioTab || 'notebook');
+        renderBubbleStudioNotebook(task);
+        renderBubbleStudioChecklist(task);
+        renderBubbleStudioActivity(task);
+        renderBubbleStudioAiMessages(task);
+      }
+
+      function flushBubbleStudioNotebook() {
+        if (runtime.bubbleStudioNbTimer) {
+          clearTimeout(runtime.bubbleStudioNbTimer);
+          runtime.bubbleStudioNbTimer = null;
+        }
+        const task = state.tasks.find(t => t.id === runtime.bubbleStudioTaskId);
+        const editor = document.getElementById('bsw-notebook-editor');
+        if (!task || !editor) return;
+        if (task.notebook !== editor.value) {
+          task.notebook = editor.value;
+          appendBubbleActivity(task, 'notebook_edit', `保存笔记本内容（${task.notebook.length} 字）`, { coalesceSec: 30 });
+          saveState(false, `更新「${task.title.slice(0, 12)}」笔记本`);
+        }
+      }
+
+      function openBubbleStudio(taskId, { tab = 'notebook' } = {}) {
+        const task = state.tasks.find(t => t.id === taskId);
+        if (!task) return;
+        closeAllTransientPopovers();
+        selectTask(task.id, { spotlight: true });
+        runtime.bubbleStudioTaskId = task.id;
+        runtime.bubbleStudioTab = tab || 'notebook';
+        const backdrop = document.getElementById('bubble-studio-backdrop');
+        const win = document.getElementById('bubble-studio-window');
+        if (win && !runtime.bubbleStudioMaximized) {
+          win.style.left = '';
+          win.style.top = '';
+        }
+        if (backdrop) backdrop.classList.add('open');
+        renderBubbleStudio();
+      }
+
+      function closeBubbleStudio() {
+        flushBubbleStudioNotebook();
+        runtime.bubbleStudioTaskId = null;
+        document.getElementById('bubble-studio-backdrop')?.classList.remove('open');
+        renderInspector();
+      }
+
       // ---------- Event Wiring ----------
       function bindUIEvents() {
+        // Bubble Studio Independent Floating Window Events
+        const studioBackdrop = document.getElementById('bubble-studio-backdrop');
+        const studioWin = document.getElementById('bubble-studio-window');
+        const studioHeader = document.getElementById('bsw-header');
+        studioWin?.addEventListener('click', e => e.stopPropagation());
+        studioBackdrop?.addEventListener('click', e => {
+          if (e.target === studioBackdrop) closeBubbleStudio();
+        });
+        document.getElementById('bsw-close-btn')?.addEventListener('click', () => closeBubbleStudio());
+        document.getElementById('bsw-maximize-btn')?.addEventListener('click', () => {
+          runtime.bubbleStudioMaximized = !runtime.bubbleStudioMaximized;
+          studioWin?.classList.toggle('maximized', runtime.bubbleStudioMaximized);
+          if (!runtime.bubbleStudioMaximized && studioWin) {
+            studioWin.style.left = '';
+            studioWin.style.top = '';
+          }
+        });
+        if (studioHeader && studioWin) {
+          let dragStart = null;
+          studioHeader.addEventListener('pointerdown', e => {
+            if (runtime.bubbleStudioMaximized) return;
+            if (e.target.closest('button, input, select, a, textarea')) return;
+            const rect = studioWin.getBoundingClientRect();
+            dragStart = { px: e.clientX, py: e.clientY, left: rect.left, top: rect.top };
+            studioWin.style.position = 'fixed';
+            studioWin.style.left = `${rect.left}px`;
+            studioWin.style.top = `${rect.top}px`;
+          });
+          window.addEventListener('pointermove', e => {
+            if (!dragStart) return;
+            const dx = e.clientX - dragStart.px;
+            const dy = e.clientY - dragStart.py;
+            const maxLeft = Math.max(0, window.innerWidth - 160);
+            const maxTop = Math.max(0, window.innerHeight - 100);
+            studioWin.style.left = `${clamp(dragStart.left + dx, 0, maxLeft)}px`;
+            studioWin.style.top = `${clamp(dragStart.top + dy, 0, maxTop)}px`;
+          });
+          window.addEventListener('pointerup', () => { dragStart = null; });
+        }
+
+        document.getElementById('bsw-title-input')?.addEventListener('input', e => {
+          const task = state.tasks.find(t => t.id === runtime.bubbleStudioTaskId);
+          if (!task) return;
+          task.title = e.target.value.trim() || '未命名气泡';
+          saveState(false, `编辑「${task.title.slice(0, 14)}」`);
+          renderTop3Canopy();
+        });
+        document.getElementById('bsw-priority-select')?.addEventListener('change', e => {
+          const task = state.tasks.find(t => t.id === runtime.bubbleStudioTaskId);
+          if (!task) return;
+          task.priority = e.target.value;
+          appendBubbleActivity(task, 'priority_change', `调整优先级为 ${PRIORITY_LABEL[task.priority] || task.priority}`);
+          saveState(false, `更新「${task.title.slice(0, 12)}」优先级`);
+          renderBubbleStudioActivity(task);
+        });
+        document.getElementById('bsw-due-btn')?.addEventListener('click', e => {
+          e.stopPropagation();
+          const task = state.tasks.find(t => t.id === runtime.bubbleStudioTaskId);
+          if (!task) return;
+          openCalendarPicker({
+            anchorEl: e.currentTarget,
+            mode: 'datetime',
+            presetKind: 'due',
+            valueMs: task.dueAt,
+            title: '📅 设定截止时间',
+            allowClear: true,
+            onSelect: (ms) => {
+              task.dueAt = Number.isFinite(ms) && ms > 0 ? ms : null;
+              appendBubbleActivity(task, 'due_change', task.dueAt ? `设定截止时间 ${formatDueShort(task.dueAt)}` : '清除截止时间');
+              saveState(false, '更新气泡截止时间');
+              renderBubbleStudio();
+              renderAllChrome();
+            }
+          });
+        });
+        const handleStudioComplete = () => {
+          if (runtime.bubbleStudioTaskId) toggleTaskComplete(runtime.bubbleStudioTaskId);
+        };
+        document.getElementById('bsw-complete-btn')?.addEventListener('click', handleStudioComplete);
+        document.getElementById('bsw-reopen-btn')?.addEventListener('click', handleStudioComplete);
+
+        document.querySelectorAll('[data-bsw-tab]').forEach(btn => {
+          btn.addEventListener('click', () => switchBubbleStudioTab(btn.dataset.bswTab));
+        });
+        document.querySelectorAll('[data-bsw-nb-view]').forEach(btn => {
+          btn.addEventListener('click', () => {
+            runtime.bubbleStudioNbView = btn.dataset.bswNbView;
+            syncBubbleStudioNbView();
+          });
+        });
+        document.querySelectorAll('[data-bsw-act-filter]').forEach(btn => {
+          btn.addEventListener('click', () => {
+            runtime.bubbleStudioActFilter = btn.dataset.bswActFilter;
+            const task = state.tasks.find(t => t.id === runtime.bubbleStudioTaskId);
+            if (task) renderBubbleStudioActivity(task);
+          });
+        });
+
+        const bswEditor = document.getElementById('bsw-notebook-editor');
+        const bswPreview = document.getElementById('bsw-notebook-preview');
+        const bswSaveStatus = document.getElementById('bsw-save-status');
+        bswEditor?.addEventListener('input', () => {
+          const task = state.tasks.find(t => t.id === runtime.bubbleStudioTaskId);
+          if (!task) return;
+          task.notebook = bswEditor.value;
+          if (bswPreview) bswPreview.innerHTML = renderSafeMarkdown(task.notebook);
+          if (bswSaveStatus) bswSaveStatus.textContent = '◌ 正在保存...';
+          if (runtime.bubbleStudioNbTimer) clearTimeout(runtime.bubbleStudioNbTimer);
+          runtime.bubbleStudioNbTimer = setTimeout(() => {
+            runtime.bubbleStudioNbTimer = null;
+            appendBubbleActivity(task, 'notebook_edit', `更新笔记本（${task.notebook.length} 字）`, { coalesceSec: 30 });
+            saveState(false, `更新「${task.title.slice(0, 12)}」笔记本`);
+            if (bswSaveStatus) bswSaveStatus.textContent = '● 已保存至气泡';
+            renderBubbleStudioActivity(task);
+          }, 320);
+        });
+
+        document.querySelectorAll('[data-bsw-md]').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const task = state.tasks.find(t => t.id === runtime.bubbleStudioTaskId);
+            if (!task || !bswEditor) return;
+            const kind = btn.dataset.bswMd;
+            let snippet = '';
+            if (kind === 'h2') snippet = '\n## 小节标题\n';
+            else if (kind === 'bold') snippet = '**重点内容**';
+            else if (kind === 'todo') snippet = '\n- [ ] 待办子项';
+            else if (kind === 'code') snippet = '\n```\n代码或命令\n```\n';
+            else if (kind === 'quote') snippet = '\n> 关键参考引用\n';
+            else if (kind === 'time') snippet = `\n### 🕒 ${formatCompletedFull(Date.now())}\n`;
+            const start = bswEditor.selectionStart ?? bswEditor.value.length;
+            const end = bswEditor.selectionEnd ?? bswEditor.value.length;
+            bswEditor.value = bswEditor.value.slice(0, start) + snippet + bswEditor.value.slice(end);
+            task.notebook = bswEditor.value;
+            if (bswPreview) bswPreview.innerHTML = renderSafeMarkdown(task.notebook);
+            appendBubbleActivity(task, 'notebook_edit', `插入笔记模板（${kind}）`, { coalesceSec: 30 });
+            saveState(false, `编辑「${task.title.slice(0, 12)}」笔记本`);
+            bswEditor.focus();
+          });
+        });
+
+        document.getElementById('bsw-export-md-btn')?.addEventListener('click', () => {
+          const task = state.tasks.find(t => t.id === runtime.bubbleStudioTaskId);
+          if (!task) return;
+          const clMd = (task.checklist || []).map(c => `- [${c.done ? 'x' : ' '}] ${c.text}`).join('\n');
+          const aiMd = (task.aiHistory || []).map(m => `### ${m.role === 'user' ? '提问' : '✦ AI 回复'}\n\n${m.content}`).join('\n\n');
+          const md = `# ${task.title}\n\n${task.notebook || ''}\n\n${clMd ? `## 子任务清单\n\n${clMd}\n\n` : ''}${aiMd ? `## AI 对话记录\n\n${aiMd}\n` : ''}`;
+          const blob = new Blob([md], { type: 'text/markdown;charset=utf-8' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `${(task.title || 'bubble').replace(/[^\w\u4e00-\u9fa5-]+/g, '_')}.md`;
+          a.click();
+          URL.revokeObjectURL(url);
+        });
+
+        const addStudioChecklistItem = () => {
+          const task = state.tasks.find(t => t.id === runtime.bubbleStudioTaskId);
+          const inp = document.getElementById('bsw-checklist-input');
+          if (!task || !inp) return;
+          const text = inp.value.trim();
+          if (!text) return;
+          if (!Array.isArray(task.checklist)) task.checklist = [];
+          task.checklist.push({ id: uid('chk'), text: text.slice(0, 300), done: false, createdAt: Date.now(), completedAt: null });
+          inp.value = '';
+          appendBubbleActivity(task, 'checklist_add', `新增子任务「${text.slice(0, 40)}」`);
+          saveState(false, `新增子任务「${text.slice(0, 14)}」`);
+          renderBubbleStudioChecklist(task);
+          renderBubbleStudioActivity(task);
+          inp.focus();
+        };
+        document.getElementById('bsw-checklist-add-btn')?.addEventListener('click', addStudioChecklistItem);
+        document.getElementById('bsw-checklist-input')?.addEventListener('keydown', e => {
+          if (e.key === 'Enter' && !e.isComposing) {
+            e.preventDefault();
+            addStudioChecklistItem();
+          }
+        });
+        document.getElementById('bsw-checklist-to-nb-btn')?.addEventListener('click', () => {
+          const task = state.tasks.find(t => t.id === runtime.bubbleStudioTaskId);
+          if (!task || !(task.checklist || []).length) {
+            showToast('暂无子任务可同步');
+            return;
+          }
+          const md = task.checklist.map(c => `- [${c.done ? 'x' : ' '}] ${c.text}`).join('\n');
+          const sep = (task.notebook || '').trim() ? '\n\n' : '';
+          task.notebook = `${task.notebook || ''}${sep}## ☑ 子任务进度 (${formatCompletedFull(Date.now())})\n${md}`;
+          appendBubbleActivity(task, 'notebook_edit', '将子任务清单同步到笔记本');
+          saveState(false, '同步子任务到笔记本');
+          switchBubbleStudioTab('notebook');
+          renderBubbleStudioNotebook(task);
+          renderBubbleStudioActivity(task);
+          showToast('已同步到笔记本');
+        });
+
+        document.querySelectorAll('[data-bsw-prompt]').forEach(btn => {
+          btn.addEventListener('click', () => sendBubbleStudioAiMessage(btn.dataset.bswPrompt));
+        });
+        document.getElementById('bsw-ai-send-btn')?.addEventListener('click', () => {
+          const inp = document.getElementById('bsw-ai-input');
+          if (inp) sendBubbleStudioAiMessage(inp.value);
+        });
+        document.getElementById('bsw-ai-input')?.addEventListener('keydown', e => {
+          if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+            e.preventDefault();
+            sendBubbleStudioAiMessage(e.currentTarget.value);
+          }
+        });
+        document.getElementById('bsw-ai-clear-btn')?.addEventListener('click', () => {
+          const task = state.tasks.find(t => t.id === runtime.bubbleStudioTaskId);
+          if (!task || !(task.aiHistory || []).length) return;
+          task.aiHistory = [];
+          appendBubbleActivity(task, 'ai_clear', '清空当前气泡 AI 对话历史');
+          saveState(false, '清空气泡 AI 对话');
+          renderBubbleStudioAiMessages(task);
+          renderBubbleStudioActivity(task);
+        });
+
         // Galaxy Switcher, Universe Toggle & Selector Portal
         document.getElementById('galaxy-switcher-btn')?.addEventListener('click', () => {
           openGalaxyPortal({ isBoot: false });
@@ -14428,6 +15975,10 @@
               closeGalaxyPortal();
               return;
             }
+            if (document.getElementById('bubble-studio-backdrop')?.classList.contains('open')) {
+              closeBubbleStudio();
+              return;
+            }
             closeAllTransientPopovers();
             if (reportBackdrop.classList.contains('open')) {
               reportBackdrop.classList.remove('open');
@@ -14455,6 +16006,9 @@
             return;
           }
           if (isTyping) return;
+
+          const studioOpen = Boolean(document.getElementById('bubble-studio-backdrop')?.classList.contains('open'));
+          if (studioOpen) return;
 
           const isZKey = (e.key && e.key.toLowerCase() === 'z') || e.code === 'KeyZ';
           if (!e.metaKey && !e.ctrlKey && !e.altKey && isZKey) {
