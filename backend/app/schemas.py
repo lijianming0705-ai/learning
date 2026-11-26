@@ -407,3 +407,10 @@ class ReadingAiReportResponse(BaseModel):
     report_markdown: str
     model: str
     generated_at: str
+
+
+class OcrConvertSourceRequest(BaseModel):
+    model: str | None = None
+    start_page: int = Field(default=1, ge=1)
+    end_page: int | None = Field(default=None, ge=1)
+    title: str | None = Field(default=None, max_length=280)

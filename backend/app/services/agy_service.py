@@ -862,4 +862,95 @@ async def generate_reading_behavior_analysis_with_agy(
     return (result_text or "".join(chunks)).strip()
 
 
+def build_layout_ocr_page_prompt(
+    *,
+    image_path: str,
+    source_title: str,
+    page_number: int,
+    total_pages: int,
+) -> str:
+    return (
+        "你是一个专业的学术书籍与扫描件版面分析与高精度 OCR 还原引擎。\n"
+        f"请先调用 read_file（或 view_file）工具读取图片：{image_path}（《{source_title}》第 {page_number}/{total_pages} 页扫描页）。\n"
+        "请完整、忠实地识别页面中的所有文本，并严格按照原页的阅读顺序与视觉版面结构，输出一个合法的 JSON 对象。\n"
+        "JSON Schema：\n"
+        "{\n"
+        '  "layout_columns": 1,\n'
+        '  "blocks": [\n'
+        '    {"type": "heading", "level": 1, "text": "章节标题", "align": "center"},\n'
+        '    {"type": "paragraph", "text": "正文段落（保持原语言，自动合并段内无意义换行）", "indent": false, "align": "left"},\n'
+        '    {"type": "figure", "bbox": {"x": 0.10, "y": 0.25, "width": 0.80, "height": 0.30}, "caption": "图注/说明文字（若无则空字符串）", "align": "center", "width_pct": 85},\n'
+        '    {"type": "table", "headers": ["列1", "列2"], "rows": [["值1", "值2"]]},\n'
+        '    {"type": "list", "ordered": false, "items": ["条目1", "条目2"]},\n'
+        '    {"type": "formula", "text": "独立公式（LaTeX 或可读形式）"},\n'
+        '    {"type": "blockquote", "text": "引用或提示框文本"},\n'
+        '    {"type": "code", "text": "代码块"},\n'
+        '    {"type": "columns", "columns": [[{"type": "paragraph", "text": "左栏内容"}], [{"type": "figure", "bbox": {"x": 0.52, "y": 0.20, "width": 0.42, "height": 0.25}, "caption": "右栏配图"}]]}\n'
+        "  ]\n"
+        "}\n\n"
+        "核心还原规则：\n"
+        "1. 【配图精确保留】：页中所有插图、照片、图表、流程图、示意图、带图文框，都必须输出为 `type: \"figure\"`，"
+        "并给出其**图像主体本身**（不含下方图注文字）在整页中的归一化坐标 `bbox`（`x`, `y` 为左上角，`width`, `height` 为宽高，均在 `0.0` 到 `1.0` 之间），以便从原页无损裁剪配图插回文本版原位！\n"
+        "2. 【分栏与图文混排】：若原页某区域明显是左右双栏正文或左文右图/左图右文并排结构，请使用 `type: \"columns\"` 分别放入对应栏的 blocks；纯单栏顺序内容则直接放入顶层 `blocks`。\n"
+        "3. 【排版还原】：忠实保留标题层级（level 1~4）、对齐（left/center/right）、表格行列结构、无序/有序列表、独立数学公式和引文块；忽略页眉小字页码，但不要遗漏正文与图注。\n"
+        "4. 重要约束：除读取上述指定页面图片外，不要调用其他工具；必须仅输出严格合法的 JSON 对象，不要包含额外解释文字。"
+    )
+
+
+def _fallback_layout_from_raw(raw: str) -> dict[str, Any]:
+    cleaned = re.sub(r"^```(?:json|markdown)?\s*", "", (raw or "").strip())
+    cleaned = re.sub(r"\s*```$", "", cleaned).strip()
+    paragraphs = [p.strip() for p in re.split(r"\n\s*\n", cleaned) if p.strip()]
+    if not paragraphs:
+        paragraphs = [cleaned] if cleaned else ["（本页未识别出有效文字）"]
+    blocks: list[dict[str, Any]] = []
+    for p in paragraphs:
+        if p.startswith("#"):
+            m = re.match(r"^(#{1,4})\s+(.+)$", p)
+            if m:
+                blocks.append({"type": "heading", "level": len(m.group(1)), "text": m.group(2).strip(), "align": "left"})
+                continue
+        blocks.append({"type": "paragraph", "text": p, "indent": False, "align": "left"})
+    return {"layout_columns": 1, "blocks": blocks}
+
+
+async def ocr_pdf_page_layout_with_agy(
+    *,
+    job_id: str,
+    image_path: str,
+    source_title: str,
+    page_number: int,
+    total_pages: int,
+    model: str,
+) -> dict[str, Any]:
+    prompt = build_layout_ocr_page_prompt(
+        image_path=image_path,
+        source_title=source_title,
+        page_number=page_number,
+        total_pages=total_pages,
+    )
+    chunks: list[str] = []
+    result_text = ""
+    async for kind, data in agy_service.stream_prompt(
+        thread_key=f"ocr_layout:{job_id}",
+        model=model,
+        prompt=prompt,
+    ):
+        if kind == "delta":
+            chunks.append(str(data))
+        elif kind == "result" and isinstance(data, dict):
+            result_text = str(data.get("response") or "")
+        elif kind == "error":
+            raise RuntimeError(str(data))
+
+    raw_output = (result_text or "".join(chunks)).strip()
+    try:
+        parsed = _extract_json_object(raw_output)
+        if isinstance(parsed.get("blocks"), list) and len(parsed["blocks"]) > 0:
+            return parsed
+    except Exception:
+        pass
+    return _fallback_layout_from_raw(raw_output)
+
+
 agy_service = AgyService()

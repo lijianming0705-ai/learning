@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
 import sqlite3
 import uuid
 from datetime import datetime, timedelta
@@ -173,6 +174,10 @@ def update_notebook(notebook_id: str, payload: NotebookUpdate) -> NotebookOut | 
 
 def delete_notebook(notebook_id: str) -> bool:
     with get_db() as conn:
+        src_id_rows = conn.execute(
+            "SELECT id FROM sources WHERE notebook_id = ?",
+            (notebook_id,),
+        ).fetchall()
         file_rows = conn.execute(
             "SELECT file_path FROM sources WHERE notebook_id = ? AND file_path IS NOT NULL",
             (notebook_id,),
@@ -204,6 +209,9 @@ def delete_notebook(notebook_id: str) -> bool:
             cp.unlink(missing_ok=True)
     for sr in speech_rows:
         Path(sr["audio_path"]).unlink(missing_ok=True)
+    ocr_assets_root = ensure_data_dirs().ocr_assets_dir
+    for srow in src_id_rows:
+        shutil.rmtree(ocr_assets_root / srow["id"], ignore_errors=True)
     uploads_nb_dir = ensure_data_dirs().uploads_dir / notebook_id
     if uploads_nb_dir.exists() and not any(uploads_nb_dir.iterdir()):
         uploads_nb_dir.rmdir()
@@ -457,6 +465,7 @@ def delete_source(source_id: str) -> bool:
         Path(cr["image_path"]).unlink(missing_ok=True)
     for sr in speech_rows:
         Path(sr["audio_path"]).unlink(missing_ok=True)
+    shutil.rmtree(ensure_data_dirs().ocr_assets_dir / source_id, ignore_errors=True)
     rag_store.delete_by_filter(source_id=source_id)
     return True
 

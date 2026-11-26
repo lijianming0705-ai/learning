@@ -23,6 +23,7 @@ import { DocumentViewer } from './components/DocumentViewer';
 import { Header } from './components/Header';
 import { NotebookChatPanel } from './components/NotebookChatPanel';
 import { NotebookGrid } from './components/NotebookGrid';
+import { PdfOcrConvertModal, type OcrConvertTarget } from './components/PdfOcrConvertModal';
 import { PdfViewer } from './components/PdfViewer';
 import { RagExplorerPanel } from './components/RagExplorerPanel';
 import { ReadingAnalyticsModal } from './components/ReadingAnalyticsModal';
@@ -126,6 +127,7 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [showGlobalRag, setShowGlobalRag] = useState(false);
   const [showAnalytics, setShowAnalytics] = useState(false);
+  const [ocrConvertTarget, setOcrConvertTarget] = useState<OcrConvertTarget | null>(null);
   const [activeReadingPos, setActiveReadingPos] = useState<{ page: number; scrollRatio: number }>({
     page: 1,
     scrollRatio: 0,
@@ -1091,6 +1093,14 @@ export default function App() {
                 onUpdateSource={handleUpdateSource}
                 onClassifySources={handleClassifySources}
                 onDeleteSource={handleDeleteSource}
+                onOpenOcrConvert={(src) =>
+                  setOcrConvertTarget({
+                    id: src.id,
+                    title: src.title,
+                    page_count: src.page_count,
+                    is_scanned: src.is_scanned,
+                  })
+                }
                 onOpenAnalytics={() => setShowAnalytics(true)}
                 onCollapse={() => setLeftCollapsed(true)}
               />
@@ -1117,6 +1127,15 @@ export default function App() {
                     onUpdateSource={handleUpdateSource}
                     onClassifySources={handleClassifySources}
                     onDeleteSource={handleDeleteSource}
+                    onOpenOcrConvert={(src) => {
+                      setMobileDrawer('none');
+                      setOcrConvertTarget({
+                        id: src.id,
+                        title: src.title,
+                        page_count: src.page_count,
+                        is_scanned: src.is_scanned,
+                      });
+                    }}
                     onOpenAnalytics={() => {
                       setMobileDrawer('none');
                       setShowAnalytics(true);
@@ -1186,6 +1205,14 @@ export default function App() {
                   suppressAutoRestore={suppressAutoRestore}
                   liveSessionSeconds={liveSessionSeconds}
                   onSaveReadingPosition={handleSaveReadingPosition}
+                  onOpenOcrConvert={() =>
+                    setOcrConvertTarget({
+                      id: activeSource.id,
+                      title: activeSource.title,
+                      page_count: activeSource.page_count,
+                      is_scanned: activeSource.is_scanned,
+                    })
+                  }
                   onSelectHighlight={(hlId) => {
                     setActiveHighlightId(hlId);
                     setRightTab('remarks');
@@ -1662,6 +1689,26 @@ export default function App() {
             }
           }}
           onClose={() => setShowAnalytics(false)}
+        />
+      )}
+
+      {ocrConvertTarget && (
+        <PdfOcrConvertModal
+          target={ocrConvertTarget}
+          models={models}
+          selectedModel={selectedModel}
+          onSelectModel={handleSelectModel}
+          onConverted={async (newSource) => {
+            if (activeNotebook) {
+              await Promise.all([
+                api.listSources(activeNotebook.id).then(setSources),
+                refreshNotebooks(),
+                refreshSystem(false),
+              ]);
+            }
+            await loadSource(newSource.id);
+          }}
+          onClose={() => setOcrConvertTarget(null)}
         />
       )}
 

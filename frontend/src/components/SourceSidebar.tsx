@@ -17,6 +17,7 @@ import {
   Loader2,
   PanelLeftClose,
   Pencil,
+  ScanText,
   Search,
   Sparkles,
   Trash2,
@@ -38,6 +39,7 @@ interface SourceSidebarProps {
   onUpdateSource: (sourceId: string, patch: { title?: string; category?: string }) => Promise<void>;
   onClassifySources: () => Promise<void>;
   onDeleteSource: (sourceId: string) => Promise<void>;
+  onOpenOcrConvert?: (source: SourceSummary) => void;
   onOpenAnalytics?: () => void;
   onCollapse?: () => void;
 }
@@ -52,6 +54,7 @@ export function SourceSidebar({
   onUpdateSource,
   onClassifySources,
   onDeleteSource,
+  onOpenOcrConvert,
   onOpenAnalytics,
   onCollapse,
 }: SourceSidebarProps) {
@@ -320,6 +323,19 @@ export function SourceSidebar({
             </span>
           </div>
           <div className="flex items-center gap-0.5 shrink-0">
+            {src.type === 'pdf' && onOpenOcrConvert && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenOcrConvert(src);
+                }}
+                className="opacity-100 md:opacity-0 md:group-hover:opacity-100 p-1 rounded text-[#5E5B53] hover:text-[#B45309] cursor-pointer"
+                title="一键 OCR 识别并保留排版配图输出文本版"
+              >
+                <ScanText className="w-3 h-3" />
+              </button>
+            )}
             <button
               type="button"
               onClick={(e) => {

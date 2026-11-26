@@ -40,6 +40,43 @@ def test_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
             )
         elif thread_key.startswith("ocr:"):
             answer = "识别文本：E = mc^2（质能等价公式）"
+        elif thread_key.startswith("ocr_layout:"):
+            import json
+
+            answer = json.dumps(
+                {
+                    "layout_columns": 1,
+                    "blocks": [
+                        {"type": "heading", "level": 1, "text": "相对论基础笔记", "align": "center"},
+                        {
+                            "type": "paragraph",
+                            "text": "扫描页正文指出质能等价关系如下：",
+                            "indent": True,
+                            "align": "left",
+                        },
+                        {
+                            "type": "figure",
+                            "bbox": {"x": 0.08, "y": 0.2, "width": 0.82, "height": 0.45},
+                            "caption": "图 1 质能公式示意图",
+                            "align": "center",
+                            "width_pct": 85,
+                        },
+                        {
+                            "type": "columns",
+                            "columns": [
+                                [{"type": "paragraph", "text": "左栏说明：能量与质量正相关。"}],
+                                [{"type": "paragraph", "text": "右栏补充：c 表示真空光速。"}],
+                            ],
+                        },
+                        {
+                            "type": "table",
+                            "headers": ["物理量", "符号"],
+                            "rows": [["能量", "E"], ["质量", "m"]],
+                        },
+                    ],
+                },
+                ensure_ascii=False,
+            )
         elif thread_key.startswith("speech_sel:"):
             import json
 

@@ -17,6 +17,8 @@ class AppPaths:
     agy_workdir: Path
     crops_dir: Path
     speech_dir: Path
+    ocr_assets_dir: Path
+    ocr_pages_dir: Path
 
 
 def get_paths() -> AppPaths:
@@ -31,6 +33,8 @@ def get_paths() -> AppPaths:
         agy_workdir=agy_workdir,
         crops_dir=agy_workdir / "crops",
         speech_dir=data_dir / "speech",
+        ocr_assets_dir=data_dir / "ocr_assets",
+        ocr_pages_dir=agy_workdir / "ocr_pages",
     )
 
 
@@ -41,6 +45,8 @@ def ensure_data_dirs() -> AppPaths:
     paths.agy_workdir.mkdir(parents=True, exist_ok=True)
     paths.crops_dir.mkdir(parents=True, exist_ok=True)
     paths.speech_dir.mkdir(parents=True, exist_ok=True)
+    paths.ocr_assets_dir.mkdir(parents=True, exist_ok=True)
+    paths.ocr_pages_dir.mkdir(parents=True, exist_ok=True)
     return paths
 
 

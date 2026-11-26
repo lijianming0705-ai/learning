@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, Clock, ExternalLink, FileText, ZoomIn, ZoomOut } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Clock, Download, ExternalLink, FileText, ZoomIn, ZoomOut } from 'lucide-react';
 import { usePinchZoom } from '../hooks/usePinchZoom';
 import type { Highlight, PendingSelection, SourceDetail } from '../types';
 import { formatShortDuration } from '../utils/formatDuration';
@@ -362,6 +362,27 @@ export function DocumentViewer({
                 >
                   <ZoomIn className="w-3.5 h-3.5 sm:w-3 sm:h-3" />
                 </button>
+              </div>
+
+              <div className="inline-flex items-center gap-1 rounded-lg border border-[#E5E0D5] bg-[#FAF8F4] px-1.5 py-0.5 text-[11px]">
+                <a
+                  href={`/api/sources/${source.id}/export?format=html`}
+                  download
+                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-[#EFECE5] text-[#1C1B18]"
+                  title="导出包含内嵌配图与原版排版的独立 HTML 文件"
+                >
+                  <Download className="w-3 h-3 text-[#B45309]" />
+                  <span>HTML</span>
+                </a>
+                <span className="text-[#DCD5C7]">|</span>
+                <a
+                  href={`/api/sources/${source.id}/export?format=md`}
+                  download
+                  className="px-1.5 py-0.5 rounded hover:bg-[#EFECE5] text-[#1C1B18]"
+                  title="导出 Markdown 文本版"
+                >
+                  MD
+                </a>
               </div>
 
               {source.source_url && (

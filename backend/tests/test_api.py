@@ -206,6 +206,45 @@ def test_full_study_workflow_and_rag_persistence(test_client, tmp_path: Path) ->
     assert scan_ask.status_code == 200
     assert "event: done" in scan_ask.text
 
+    # 9b-2. One-click scanned PDF layout-preserving OCR -> structured text edition + assets + export
+    conv_resp = test_client.post(
+        f"/api/sources/{scan_src['id']}/ocr-convert",
+        json={"start_page": 1, "end_page": 1, "title": "扫描讲义 OCR 排版版"},
+    )
+    assert conv_resp.status_code == 200
+    conv_events = _parse_sse_events(conv_resp.text)
+    conv_names = [n for n, _ in conv_events]
+    assert "start" in conv_names
+    assert "progress" in conv_names
+    assert "done" in conv_names
+    done_payload = [d for n, d in conv_events if n == "done"][-1]
+    assert done_payload["total_figures"] == 1
+    ocr_src = done_payload["source"]
+    assert ocr_src["type"] == "text"
+    assert ocr_src["is_scanned"] is False
+    assert "<h1" in ocr_src["html_content"]
+    assert "ocr-columns-2" in ocr_src["html_content"]
+    assert "<table>" in ocr_src["html_content"]
+    expected_asset_url = f"/api/sources/{ocr_src['id']}/assets/p1_fig1.png"
+    assert expected_asset_url in ocr_src["html_content"]
+
+    asset_resp = test_client.get(expected_asset_url)
+    assert asset_resp.status_code == 200
+    assert asset_resp.content[:8] == b"\x89PNG\r\n\x1a\n"
+
+    export_html_resp = test_client.get(f"/api/sources/{ocr_src['id']}/export", params={"format": "html"})
+    assert export_html_resp.status_code == 200
+    assert "data:image/png;base64," in export_html_resp.text
+    assert "相对论基础笔记" in export_html_resp.text
+
+    export_md_resp = test_client.get(f"/api/sources/{ocr_src['id']}/export", params={"format": "md"})
+    assert export_md_resp.status_code == 200
+    assert "# 相对论基础笔记" in export_md_resp.text
+
+    ocr_rag = test_client.get("/api/rag/search", params={"q": "质能公式示意图 真空光速", "doc_type": "source_chunk"})
+    assert ocr_rag.status_code == 200
+    assert any(hit["source_id"] == ocr_src["id"] for hit in ocr_rag.json())
+
     # 9c. Selection pronunciation + full-text natural speech script + select-to-jump
     sel_speech = test_client.post(
         "/api/speech/selection",
@@ -312,7 +351,7 @@ def test_full_study_workflow_and_rag_persistence(test_client, tmp_path: Path) ->
     nb_list = test_client.get("/api/notebooks").json()
     target_nb = [n for n in nb_list if n["id"] == nb_id][0]
     assert target_nb["total_reading_seconds"] == 100
-    assert target_nb["avg_reading_progress"] > 0.4
+    assert abs(target_nb["avg_reading_progress"] - (1.0 / 3.0)) < 0.01
 
     analytics_resp = test_client.get("/api/analytics/reading", params={"notebook_id": nb_id, "days": 30})
     assert analytics_resp.status_code == 200

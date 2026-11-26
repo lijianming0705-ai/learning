@@ -336,3 +336,120 @@ export function streamNotebookChat(
 ) {
   return consumeSse(`/api/notebooks/${notebookId}/chat`, payload, cb, signal);
 }
+
+export interface OcrConvertProgressEvent {
+  current: number;
+  total: number;
+  page_number: number;
+  stage: 'rendering' | 'ocr' | 'done_page';
+  message: string;
+  figures_count?: number;
+  preview?: string;
+}
+
+export interface OcrConvertCallbacks {
+  onStart?: (payload: {
+    job_id: string;
+    source_id: string;
+    source_title: string;
+    output_title: string;
+    start_page: number;
+    end_page: number;
+    total_pages: number;
+    model: string;
+  }) => void;
+  onProgress?: (payload: OcrConvertProgressEvent) => void;
+  onDone?: (payload: { source: SourceDetail; total_figures: number }) => void;
+  onError?: (message: string) => void;
+}
+
+export async function streamPdfOcrConvert(
+  sourceId: string,
+  payload: {
+    model?: string;
+    start_page?: number;
+    end_page?: number;
+    title?: string;
+  },
+  cb: OcrConvertCallbacks,
+  signal?: AbortSignal,
+): Promise<void> {
+  const resp = await fetch(`/api/sources/${sourceId}/ocr-convert`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+    signal,
+  });
+
+  if (!resp.ok) {
+    let errText = `OCR 转换请求失败 (${resp.status})`;
+    try {
+      const j = await resp.json();
+      if (j?.detail) errText = String(j.detail);
+    } catch {
+      // ignore parse failure
+    }
+    cb.onError?.(errText);
+    return;
+  }
+
+  const reader = resp.body?.getReader();
+  if (!reader) {
+    cb.onError?.('浏览器不支持流式读取响应');
+    return;
+  }
+
+  const decoder = new TextDecoder('utf-8');
+  let buffer = '';
+
+  const processBlock = (block: string) => {
+    const trimmed = block.trim();
+    if (!trimmed) return;
+    let eventName = 'message';
+    const dataLines: string[] = [];
+    for (const line of trimmed.split('\n')) {
+      if (line.startsWith('event:')) {
+        eventName = line.slice(6).trim();
+      } else if (line.startsWith('data:')) {
+        dataLines.push(line.slice(5).trim());
+      }
+    }
+    if (dataLines.length === 0) return;
+    let parsed: Record<string, unknown> = {};
+    try {
+      parsed = JSON.parse(dataLines.join('\n')) as Record<string, unknown>;
+    } catch {
+      return;
+    }
+    if (eventName === 'start') {
+      cb.onStart?.(parsed as unknown as Parameters<NonNullable<OcrConvertCallbacks['onStart']>>[0]);
+    } else if (eventName === 'progress') {
+      cb.onProgress?.(parsed as unknown as OcrConvertProgressEvent);
+    } else if (eventName === 'done') {
+      cb.onDone?.(parsed as unknown as Parameters<NonNullable<OcrConvertCallbacks['onDone']>>[0]);
+    } else if (eventName === 'error') {
+      cb.onError?.(String(parsed.message || 'OCR 转换失败'));
+    }
+  };
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let sepIdx = buffer.indexOf('\n\n');
+      while (sepIdx !== -1) {
+        const block = buffer.slice(0, sepIdx);
+        buffer = buffer.slice(sepIdx + 2);
+        processBlock(block);
+        sepIdx = buffer.indexOf('\n\n');
+      }
+    }
+    if (buffer.trim()) {
+      processBlock(buffer);
+    }
+  } catch (err) {
+    if (signal?.aborted) return;
+    cb.onError?.(err instanceof Error ? err.message : 'OCR 转换中断');
+  }
+}

@@ -11,6 +11,7 @@ import {
   Highlighter,
   Loader2,
   MoveHorizontal,
+  ScanText,
   ScrollText,
   ZoomIn,
   ZoomOut,
@@ -31,6 +32,7 @@ interface PdfViewerProps {
   suppressAutoRestore?: boolean;
   liveSessionSeconds?: number;
   onSaveReadingPosition?: (sourceId: string, page: number, scrollRatio: number) => void;
+  onOpenOcrConvert?: () => void;
   onSelectHighlight: (highlightId: string) => void;
   onSelectionMade: (sel: PendingSelection) => void;
 }
@@ -418,6 +420,7 @@ export function PdfViewer({
   suppressAutoRestore = false,
   liveSessionSeconds = 0,
   onSaveReadingPosition,
+  onOpenOcrConvert,
   onSelectHighlight,
   onSelectionMade,
 }: PdfViewerProps) {
@@ -847,23 +850,47 @@ export function PdfViewer({
               <MoveHorizontal className="w-3 h-3 text-[#B45309]" />
               <span className="hidden sm:inline">适宽</span>
             </button>
+
+            {onOpenOcrConvert && (
+              <button
+                type="button"
+                onClick={onOpenOcrConvert}
+                className="inline-flex items-center gap-1 px-2 py-1 rounded-lg border border-[#E5E0D5] bg-[#FAF8F4] hover:border-[#B45309] hover:text-[#B45309] text-[11px] font-medium text-[#1C1B18] cursor-pointer ml-0.5"
+                title="一键 OCR 识别 PDF 并保留排版与配图重新输出文本版"
+              >
+                <ScanText className="w-3 h-3 text-[#B45309]" />
+                <span className="hidden sm:inline">OCR 转文本</span>
+              </button>
+            )}
           </div>
         </div>
       </div>
 
       {/* Scanned PDF Hint Banner */}
       {source.is_scanned && !dismissedScanHint && (
-        <div className="shrink-0 bg-amber-50 border-b border-amber-200 px-3 sm:px-4 py-1.5 flex items-center justify-between gap-2 text-[11px] text-amber-900 eink-surface">
+        <div className="shrink-0 bg-amber-50 border-b border-amber-200 px-3 sm:px-4 py-1.5 flex flex-wrap items-center justify-between gap-2 text-[11px] text-amber-900 eink-surface">
           <span>
-            已识别为<strong>扫描件 PDF</strong> · 已自动开启「框选」模式：框选任意区域即可截图并发送给 AI 进行 OCR 识别与语义问答。
+            已识别为<strong>扫描件 PDF</strong> · 可在下方框选截图提问，或一键还原为保留原版排版与配图的文本版阅读。
           </span>
-          <button
-            type="button"
-            onClick={() => setDismissedScanHint(true)}
-            className="text-amber-800 hover:underline shrink-0 cursor-pointer"
-          >
-            知道了
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            {onOpenOcrConvert && (
+              <button
+                type="button"
+                onClick={onOpenOcrConvert}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-[#B45309] hover:bg-[#92400E] text-white text-[11px] font-medium cursor-pointer"
+              >
+                <ScanText className="w-3 h-3" />
+                <span>一键 OCR 转排版文本版</span>
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setDismissedScanHint(true)}
+              className="text-amber-800 hover:underline shrink-0 cursor-pointer"
+            >
+              知道了
+            </button>
+          </div>
         </div>
       )}
 
