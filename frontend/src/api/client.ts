@@ -387,12 +387,17 @@ export async function streamPdfOcrConvert(
   });
 
   if (!resp.ok) {
-    let errText = `OCR 转换请求失败 (${resp.status})`;
-    try {
-      const j = await resp.json();
-      if (j?.detail) errText = String(j.detail);
-    } catch {
-      // ignore parse failure
+    let errText =
+      resp.status === 405
+        ? 'OCR 转换接口返回 405 (Method Not Allowed)：当前运行的后端进程尚未加载最新路由，请重启 ./start.sh 后重试'
+        : `OCR 转换请求失败 (${resp.status})`;
+    if (resp.status !== 405) {
+      try {
+        const j = await resp.json();
+        if (j?.detail) errText = String(j.detail);
+      } catch {
+        // ignore parse failure
+      }
     }
     cb.onError?.(errText);
     return;

@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 HOST="${HOST:-0.0.0.0}"
+RELOAD="${RELOAD:-1}"
 BACKEND_PID=""
 FRONTEND_PID=""
 
@@ -22,7 +23,11 @@ trap cleanup EXIT INT TERM
 echo "启动后端 API (http://$HOST:8000)..."
 (
   cd "$ROOT_DIR/backend"
-  uv run uvicorn app.main:app --host "$HOST" --port 8000
+  if [[ "$RELOAD" == "1" ]]; then
+    uv run uvicorn app.main:app --host "$HOST" --port 8000 --reload --reload-dir "$ROOT_DIR/backend/app"
+  else
+    uv run uvicorn app.main:app --host "$HOST" --port 8000
+  fi
 ) &
 BACKEND_PID=$!
 
