@@ -245,6 +245,47 @@ def test_full_study_workflow_and_rag_persistence(test_client, tmp_path: Path) ->
     assert ocr_rag.status_code == 200
     assert any(hit["source_id"] == ocr_src["id"] for hit in ocr_rag.json())
 
+    # 9b-3. Full-book multi-page scanned PDF conversion with 2x concurrency
+    fullbook_pdf = tmp_path / "fullbook_3p.pdf"
+    fb_src_doc = fitz.open()
+    for pno in range(1, 4):
+        fbp = fb_src_doc.new_page(width=420, height=200)
+        fbp.insert_text((30, 80), f"FullBook Scanned Page {pno}", fontsize=14)
+    fb_out = fitz.open()
+    for pno in range(3):
+        pix = fb_src_doc[pno].get_pixmap(matrix=fitz.Matrix(1.5, 1.5)).tobytes("png")
+        op = fb_out.new_page(width=420, height=200)
+        op.insert_image(op.rect, stream=pix)
+    fb_src_doc.close()
+    fb_out.save(str(fullbook_pdf))
+    fb_out.close()
+
+    with open(fullbook_pdf, "rb") as f:
+        fb_up = test_client.post(
+            f"/api/notebooks/{nb_id}/sources/upload",
+            files=[("files", ("fullbook_3p.pdf", f, "application/pdf"))],
+        )
+    assert fb_up.status_code == 201
+    fb_src = fb_up.json()[0]
+    assert fb_src["page_count"] == 3
+
+    fb_conv = test_client.post(
+        f"/api/sources/{fb_src['id']}/ocr-convert",
+        json={"full_book": True, "concurrency": 2, "title": "全本扫描书 OCR 版"},
+    )
+    assert fb_conv.status_code == 200
+    fb_events = _parse_sse_events(fb_conv.text)
+    fb_done = [d for n, d in fb_events if n == "done"][-1]
+    assert fb_done["total_figures"] == 3
+    assert fb_done["failed_pages"] == 0
+    fb_ocr_src = fb_done["source"]
+    assert fb_ocr_src["page_count"] == 3
+    p1_idx = fb_ocr_src["html_content"].index('data-page="1"')
+    p2_idx = fb_ocr_src["html_content"].index('data-page="2"')
+    p3_idx = fb_ocr_src["html_content"].index('data-page="3"')
+    assert p1_idx < p2_idx < p3_idx
+    assert test_client.get(f"/api/sources/{fb_ocr_src['id']}/assets/p3_fig1.png").status_code == 200
+
     # 9c. Selection pronunciation + full-text natural speech script + select-to-jump
     sel_speech = test_client.post(
         "/api/speech/selection",
@@ -351,7 +392,7 @@ def test_full_study_workflow_and_rag_persistence(test_client, tmp_path: Path) ->
     nb_list = test_client.get("/api/notebooks").json()
     target_nb = [n for n in nb_list if n["id"] == nb_id][0]
     assert target_nb["total_reading_seconds"] == 100
-    assert abs(target_nb["avg_reading_progress"] - (1.0 / 3.0)) < 0.01
+    assert abs(target_nb["avg_reading_progress"] - (1.0 / 5.0)) < 0.01
 
     analytics_resp = test_client.get("/api/analytics/reading", params={"notebook_id": nb_id, "days": 30})
     assert analytics_resp.status_code == 200

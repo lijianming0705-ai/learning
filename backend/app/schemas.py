@@ -411,6 +411,8 @@ class ReadingAiReportResponse(BaseModel):
 
 class OcrConvertSourceRequest(BaseModel):
     model: str | None = None
+    full_book: bool = True
     start_page: int = Field(default=1, ge=1)
     end_page: int | None = Field(default=None, ge=1)
+    concurrency: int = Field(default=1, ge=1, le=3)
     title: str | None = Field(default=None, max_length=280)

@@ -314,6 +314,10 @@ class AgyService:
         if w:
             await w.close()
 
+    async def release_worker(self, thread_key: str, model: str) -> None:
+        """Close and remove a pooled worker (used for batch rotation in long full-book jobs)."""
+        await self._evict_worker(thread_key, model)
+
     async def stream_prompt(
         self,
         *,
@@ -922,6 +926,7 @@ async def ocr_pdf_page_layout_with_agy(
     page_number: int,
     total_pages: int,
     model: str,
+    thread_key: str | None = None,
 ) -> dict[str, Any]:
     prompt = build_layout_ocr_page_prompt(
         image_path=image_path,
@@ -932,7 +937,7 @@ async def ocr_pdf_page_layout_with_agy(
     chunks: list[str] = []
     result_text = ""
     async for kind, data in agy_service.stream_prompt(
-        thread_key=f"ocr_layout:{job_id}",
+        thread_key=thread_key or f"ocr_layout:{job_id}",
         model=model,
         prompt=prompt,
     ):

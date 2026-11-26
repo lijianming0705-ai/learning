@@ -1708,6 +1708,15 @@ export default function App() {
             }
             await loadSource(newSource.id);
           }}
+          onPartialRefresh={async () => {
+            if (activeNotebook) {
+              await Promise.all([
+                api.listSources(activeNotebook.id).then(setSources),
+                refreshNotebooks(),
+                refreshSystem(false),
+              ]);
+            }
+          }}
           onClose={() => setOcrConvertTarget(null)}
         />
       )}

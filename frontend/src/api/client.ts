@@ -344,6 +344,8 @@ export interface OcrConvertProgressEvent {
   stage: 'rendering' | 'ocr' | 'done_page';
   message: string;
   figures_count?: number;
+  total_figures?: number;
+  failed?: boolean;
   preview?: string;
 }
 
@@ -356,10 +358,11 @@ export interface OcrConvertCallbacks {
     start_page: number;
     end_page: number;
     total_pages: number;
+    concurrency?: number;
     model: string;
   }) => void;
   onProgress?: (payload: OcrConvertProgressEvent) => void;
-  onDone?: (payload: { source: SourceDetail; total_figures: number }) => void;
+  onDone?: (payload: { source: SourceDetail; total_figures: number; failed_pages?: number }) => void;
   onError?: (message: string) => void;
 }
 
@@ -367,8 +370,10 @@ export async function streamPdfOcrConvert(
   sourceId: string,
   payload: {
     model?: string;
+    full_book?: boolean;
     start_page?: number;
     end_page?: number;
+    concurrency?: number;
     title?: string;
   },
   cb: OcrConvertCallbacks,

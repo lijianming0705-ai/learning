@@ -43,7 +43,7 @@ from app.schemas import (
     SourceUpdate,
     SpeechSegmentOut,
 )
-from app.services.source_parser import ParsedSource, chunk_text, crop_pdf_region
+from app.services.source_parser import ParsedSource, SourceChunk, chunk_text, crop_pdf_region, count_words
 
 
 def new_id() -> str:
@@ -402,6 +402,59 @@ def update_source(source_id: str, payload: SourceUpdate) -> SourceDetail | None:
             conn.execute("UPDATE notebooks SET updated_at = ? WHERE id = ?", (now, existing.notebook_id))
     if payload.title is not None and new_title != existing.title:
         rag_store.update_source_title(source_id, new_title)
+    return get_source_detail(source_id)
+
+
+def update_source_content(
+    source_id: str,
+    *,
+    html_content: str,
+    plain_text: str,
+    pages: list[tuple[int, str]],
+    chunks: list[SourceChunk] | None = None,
+) -> SourceDetail | None:
+    """Update a source's body, pages, and optionally RAG chunks (used for full-book OCR checkpoints)."""
+    existing = get_source_detail(source_id)
+    if not existing:
+        return None
+    nb = get_notebook(existing.notebook_id)
+    nb_title = nb.title if nb else ""
+    now = utc_now_iso()
+    wcount = count_words(plain_text)
+
+    with get_db() as conn:
+        conn.execute(
+            """
+            UPDATE sources
+            SET html_content = ?, plain_text = ?, page_count = ?, word_count = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (html_content, plain_text, max(1, len(pages)), wcount, now, source_id),
+        )
+        conn.execute("DELETE FROM source_pages WHERE source_id = ?", (source_id,))
+        for page_num, text_content in pages:
+            conn.execute(
+                "INSERT INTO source_pages (id, source_id, page_number, text_content) VALUES (?, ?, ?, ?)",
+                (new_id(), source_id, page_num, text_content),
+            )
+        conn.execute("UPDATE notebooks SET updated_at = ? WHERE id = ?", (now, existing.notebook_id))
+
+    if chunks is not None:
+        for idx, ch in enumerate(chunks):
+            rag_store.upsert_document(
+                doc_id=f"chunk:{source_id}:{idx}",
+                doc_type="source_chunk",
+                notebook_id=existing.notebook_id,
+                notebook_title=nb_title,
+                source_id=source_id,
+                source_title=existing.title,
+                page_number=ch.page_number,
+                title=f"{existing.title}" + (f" · P.{ch.page_number}" if ch.page_number else ""),
+                content=ch.content,
+                metadata={"chunk_index": idx, "source_type": existing.type},
+                created_at=now,
+            )
+
     return get_source_detail(source_id)
 
 
